@@ -148,5 +148,5 @@ config.py
 .goutputstream-VAFWB1
 result.json
 
-.idea
+.idea/
 .github/
