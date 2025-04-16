@@ -156,7 +156,7 @@ async def start(client, message):
                 caption=f_caption,
                 protect_content=True if pre == 'filep' else False,
                 parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
-                reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url="https://t.me/kdramaworld_ongoing") ] ] ),
+                reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ),
             )
         return
     
@@ -199,7 +199,7 @@ async def start(client, message):
                     caption=f_caption,
                     protect_content=msg.get('protect', False),
                     parse_mode= enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
-                    reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url="https://t.me/kdramaworld_ongoing") ] ] ),
+                    reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ),
                     
                 )
             except FloodWait as e:
@@ -211,7 +211,7 @@ async def start(client, message):
                     caption=f_caption,
                     parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
                     protect_content=msg.get('protect', False),
-                    reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url="https://t.me/kdramaworld_ongoing") ] ] ),
+                    reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ),
                 )
             except Exception as e:
                 logger.warning(e, exc_info=True)
@@ -280,7 +280,7 @@ async def start(client, message):
                 file_id=file_id,
                 parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
                 protect_content=True if pre == 'filep' else False,
-                reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url="https://t.me/kdramaworld_ongoing") ] ] ),
+                reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ),
             )
             filetype = msg.media
             file = getattr(msg, filetype.value)
@@ -325,7 +325,7 @@ async def start(client, message):
         caption=f_caption,
         parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
         protect_content=True if pre == 'filep' else False,
-        reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url="https://t.me/kdramaworld_ongoing") ] ] ),
+        reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ),
     )
                     
 
@@ -439,7 +439,7 @@ async def delete_all_index(bot, message):
 @Client.on_callback_query(filters.regex(r'^autofilter_delete'))
 async def delete_all_index_confirm(bot, message):
     await Media.collection.drop()
-    await message.answer('Piracy Is Crime')
+    await message.answer('Support Us By Sharing The Channel And Bot')
     await message.message.edit('Succesfully Deleted All The Indexed Files.')
 
 
@@ -898,7 +898,7 @@ async def send_msg(bot, message):
             if success:
                 await message.reply_text(f"<b>𝖸𝗈𝗎𝗋 𝖬𝖾𝗌𝗌𝖺𝗀𝖾 𝖧𝖺𝗌 𝖲𝗎𝖼𝖼𝖾𝗌𝗌𝖿𝗎𝗅𝗅𝗒 𝖲𝖾𝗇𝗍 𝖳𝗈 {user.mention}.</b>")
             else:
-                await message.reply_text("<b>An Error Occured !</b>")
+                await message.reply_text("<b>An Error Occurred !</b>")
         except Exception as e:
             await message.reply_text(f"<b>Error :- <code>{e}</code></b>")
     else:
@@ -950,7 +950,7 @@ async def send_chatmsg(bot, message):
             if success:
                 await message.reply_text(f"<b>Your message has been successfully send to <code>{chat.id}</code>.</b>")
             else:
-                await message.reply_text("<b>An Error Occured !</b>")
+                await message.reply_text("<b>An Error Occurred !</b>")
         except Exception as e:
             await message.reply_text(f"<b>Error :- <code>{e}</code></b>")
     else:

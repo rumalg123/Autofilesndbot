@@ -1,14 +1,7 @@
+import info
+
 class script(object):
-    START_TXT = """Hey sweetheart.... {} 💖
-
-
-I'm Drama Searcher bot 🤫
-
-Here you can Search Korean dramas and Korean Movies  in Our Bot. Just Start Typing....
-
-Click on the button below to add me your group and enjoy new dramas with your friends and family members ❤️
-
-<b>😎 𝖯𝗈𝗐𝖾𝗋𝖾𝖽 𝖻𝗒 @kdramaworld_ongoing</b>"""
+    START_TXT = info.START_TEXT
 
     HELP_TXT = """🙋🏻‍♂️   𝖧𝖾𝗅𝗅𝗈𝗈𝗈  {} ♥️
 

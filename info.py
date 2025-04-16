@@ -88,6 +88,11 @@ MELCOW_NEW_USERS = is_enabled(environ.get('MELCOW_NEW_USERS', "False"), True)
 PROTECT_CONTENT = is_enabled(environ.get('PROTECT_CONTENT', "False"), False)
 PUBLIC_FILE_STORE = is_enabled(environ.get('PUBLIC_FILE_STORE', "False"), True)
 KEEP_ORIGINAL_CAPTION = is_enabled(environ.get('KEEP_ORIGINAL_CAPTION', "True"), True)
+POWERED_BY = environ.get("POWERED_BY", "@kdramaworld_ongoing")
+SUPPORT_GROUP = environ.get("SUPPORT_GROUP", "https://t.me/kdramasmirrorchat")
+SUPPORT_GROUP_USERNAME = environ.get("SUPPORT_GROUP_USERNAME", "@kdramasmirrorchat")
+MAIN_CHANNEL = environ.get("MAIN_CHANNEL", "https://t.me/kdramaworld_ongoing")
+START_TEXT = environ.get("START_TEXT","HELLO!!")
 
 # A log string (for informational purposes)
 LOG_STR = "Current Cusomized Configurations are:-\n"
@@ -165,7 +170,12 @@ def get_config_data_from_env():
         "MELCOW_NEW_USERS": MELCOW_NEW_USERS,
         "PROTECT_CONTENT": PROTECT_CONTENT,
         "PUBLIC_FILE_STORE": PUBLIC_FILE_STORE,
-        "KEEP_ORIGINAL_CAPTION": KEEP_ORIGINAL_CAPTION
+        "KEEP_ORIGINAL_CAPTION": KEEP_ORIGINAL_CAPTION,
+        "POWERED_BY": POWERED_BY,
+        "SUPPORT_GROUP": SUPPORT_GROUP,
+        "SUPPORT_GROUP_USERNAME": SUPPORT_GROUP_USERNAME,
+        "MAIN_CHANNEL": MAIN_CHANNEL,
+        "START_TEXT": START_TEXT,
     }
     return config_data
 
@@ -229,4 +239,9 @@ MELCOW_NEW_USERS = CONFIG.get("MELCOW_NEW_USERS")
 PROTECT_CONTENT = CONFIG.get("PROTECT_CONTENT")
 PUBLIC_FILE_STORE = CONFIG.get("PUBLIC_FILE_STORE")
 KEEP_ORIGINAL_CAPTION = CONFIG.get("KEEP_ORIGINAL_CAPTION")
+POWERED_BY = CONFIG.get("POWERED_BY")
+SUPPORT_GROUP = CONFIG.get("SUPPORT_GROUP")
+SUPPORT_GROUP_USERNAME = CONFIG.get("SUPPORT_GROUP_USERNAME")
+MAIN_CHANNEL = CONFIG.get("MAIN_CHANNEL")
+START_TEXT = CONFIG.get("START_TEXT")
 

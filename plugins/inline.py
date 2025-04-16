@@ -30,7 +30,7 @@ async def answer(bot, query):
     if not await inline_users(query):
         await query.answer(results=[],
                            cache_time=0,
-                           switch_pm_text='okDa',
+                           switch_pm_text='Nothing Yet',
                            switch_pm_parameter="hehe")
         return
 
@@ -86,7 +86,7 @@ async def answer(bot, query):
                 reply_markup=reply_markup))
 
     if results:
-        switch_pm_text = f"{emoji.FILE_FOLDER} 𝖧𝖾𝗋𝖾 𝖨𝗌 𝖳𝗁𝖾 𝖱𝖾𝗌𝗎𝗅𝗍𝗌 "
+        switch_pm_text = f"{emoji.FILE_FOLDER} Here are the results "
         if string:
             switch_pm_text += f" for {string}"
         try:
@@ -116,7 +116,7 @@ def get_reply_markup(query):
     buttons = [
         [
             InlineKeyboardButton('🔎 𝖲𝖾𝖺𝗋𝖼𝗁 𝖠𝗀𝖺𝗂𝗇', switch_inline_query_current_chat=query),
-            InlineKeyboardButton('⚡𝖴𝗉𝖽𝖺𝗍𝖾𝗌 ⚡', url="https://t.me/kdramaworld_ongoing")
+            InlineKeyboardButton('⚡𝖴𝗉𝖽𝖺𝗍𝖾𝗌 ⚡', url=info.MAIN_CHANNEL)
         ]
         ]
     return InlineKeyboardMarkup(buttons)
