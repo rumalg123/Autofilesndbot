@@ -149,3 +149,4 @@ config.py
 result.json
 
 .idea
+.github/
