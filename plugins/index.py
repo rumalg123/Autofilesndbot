@@ -23,10 +23,10 @@ async def index_files(bot, query):
     _, raju, chat, lst_msg_id, from_user = query.data.split("#")
     if raju == 'reject':
         await query.message.delete()
-        await bot.send_message(int(from_user),
+        return await bot.send_message(int(from_user),
                                f'Your Submission for indexing {chat} has been decliened by our moderators.',
                                reply_to_message_id=int(lst_msg_id))
-        return
+
 
     if lock.locked():
         return await query.answer('Wait until previous process complete.', show_alert=True)
@@ -47,7 +47,7 @@ async def index_files(bot, query):
         chat = int(chat)
     except:
         chat = chat
-    await index_files_to_db(int(lst_msg_id), chat, msg, bot)
+    return await index_files_to_db(int(lst_msg_id), chat, msg, bot)
 
 
 @Client.on_message((filters.forwarded | (filters.regex(r"(https://)?(t\.me/|telegram\.me/|telegram\.dog/)(c/)?(\d+|[a-zA-Z_0-9]+)/(\d+)$")) & filters.text ) & filters.private & filters.incoming)
@@ -118,7 +118,7 @@ async def send_for_index(bot, message):
     await bot.send_message(info.INDEX_REQ_CHANNEL,
                            f'#IndexRequest\n\nBy : {message.from_user.mention} (<code>{message.from_user.id}</code>)\nChat ID/ Username - <code> {chat_id}</code>\nLast Message ID - <code>{last_msg_id}</code>\nInviteLink - {link}',
                            reply_markup=reply_markup)
-    await message.reply('ThankYou For the Contribution, Wait For My Moderators to verify the files.')
+    return await message.reply('ThankYou For the Contribution, Wait For My Moderators to verify the files.')
 
 
 @Client.on_message(filters.command('setskip') & filters.user(info.ADMINS))
@@ -129,10 +129,11 @@ async def set_skip_number(bot, message):
             skip = int(skip)
         except:
             return await message.reply("Skip number should be an integer.")
-        await message.reply(f"Successfully set SKIP number as {skip}")
         temp.CURRENT = int(skip)
+        return await message.reply(f"Successfully set SKIP number as {skip}")
+
     else:
-        await message.reply("Give me a skip number")
+        return await message.reply("Give me a skip number")
 
 
 async def index_files_to_db(lst_msg_id, chat, msg, bot):

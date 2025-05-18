@@ -824,7 +824,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
     elif query.data.startswith("unavailable"):
         ident, from_user = query.data.split("#")
         btn = [[
-                InlineKeyboardButton("⚠ 𝖴𝗇𝖺𝗏𝖺𝗂𝖺𝗅𝖺𝖻𝗅𝖾 ⚠", callback_data=f"unalert#{from_user}")
+                InlineKeyboardButton("⚠ 𝖴𝗇𝖺𝗏𝖺𝗂𝗅𝖺𝖻𝗅𝖾 ⚠", callback_data=f"unalert#{from_user}")
               ]]
         btn2 = [[
                  InlineKeyboardButton("❕ 𝖵𝗂𝖾𝗐 𝖲𝗍𝖺𝗍𝗎𝗌 ❕", url=f"{query.message.link}")

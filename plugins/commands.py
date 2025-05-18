@@ -39,7 +39,9 @@ async def start(client, message):
                     InlineKeyboardButton('ᴀʙᴏᴜᴛ', callback_data='about')
                 ],[
                     InlineKeyboardButton('ꜱᴇᴀʀᴄʜ ᴅʀᴀᴍᴀꜱ', switch_inline_query_current_chat='')
-                  ]]
+                  ],
+        [InlineKeyboardButton("🔞 Adult Content Channel", url="https://t.me/eseoaOF")],
+        [InlineKeyboardButton("🍺 Buy Me A Beer", url="https://buymeacoffee.com/matthewmurdock001")],]
         reply_markup = InlineKeyboardMarkup(buttons)
         await message.reply(script.START_TXT.format(message.from_user.mention if message.from_user else message.chat.title, temp.U_NAME, temp.B_NAME), reply_markup=reply_markup)
         await asyncio.sleep(2)
@@ -62,7 +64,10 @@ async def start(client, message):
                     InlineKeyboardButton('ᴀʙᴏᴜᴛ', callback_data='about'),
                 ],[
                     InlineKeyboardButton('ꜱᴇᴀʀᴄʜ ᴅʀᴀᴍᴀꜱ', switch_inline_query_current_chat='')
-                  ]]
+                  ],
+            [InlineKeyboardButton("🔞 Adult Content Channel", url="https://t.me/eseoaOF")],
+            [InlineKeyboardButton("🍺 Buy Me A Beer", url="https://buymeacoffee.com/matthewmurdock001")],
+        ]
         reply_markup = InlineKeyboardMarkup(buttons)
         await message.reply_photo(
             photo=random.choice(info.PICS),
@@ -92,13 +97,12 @@ async def start(client, message):
                 btn.append([InlineKeyboardButton("⟳ 𝖳𝗋𝗒 𝖠𝗀𝖺𝗂𝗇 ⟳", callback_data=f"{pre}#{file_id}")])
             except (IndexError, ValueError):
                 btn.append([InlineKeyboardButton("⟳ 𝖳𝗋𝗒 𝖠𝗀𝖺𝗂𝗇 ⟳", url=f"https://t.me/{temp.U_NAME}?start={message.command[1]}")])
-        await client.send_message(
+        return await client.send_message(
             chat_id=message.from_user.id,
             text="**Please Join My Updates Channel to use this Bot!**",
             reply_markup=InlineKeyboardMarkup(btn),
             parse_mode=enums.ParseMode.MARKDOWN
             )
-        return
     if len(message.command) == 2 and message.command[1] in ["subscribe", "error", "okay", "help"]:
         buttons = [[
                     InlineKeyboardButton('➕ ᴀᴅᴅ ᴍᴇ ᴛᴏ ɢʀᴏᴜᴘ ➕', url=f"https://t.me/{temp.U_NAME}?startgroup=true")
@@ -111,7 +115,10 @@ async def start(client, message):
                 ],[
                     InlineKeyboardButton('ꜱᴇᴀʀᴄʜ ᴅʀᴀᴍᴀꜱ', switch_inline_query_current_chat='')
                     
-                  ]]
+                  ],
+            [InlineKeyboardButton("🔞 Adult Content Channel", url="https://t.me/eseoaOF")],
+            [InlineKeyboardButton("🍺 Buy Me A Beer", url="https://buymeacoffee.com/matthewmurdock001")],
+        ]
         reply_markup = InlineKeyboardMarkup(buttons)
         await message.reply_photo(
             photo=random.choice(info.PICS),
@@ -150,15 +157,19 @@ async def start(client, message):
                     f_caption=f_caption
             if f_caption is None:
                 f_caption = f"{file.file_name}"
-            await client.send_cached_media(
+            return await client.send_cached_media(
                 chat_id=message.from_user.id,
                 file_id=file.file_id,
                 caption=f_caption,
                 protect_content=True if pre == 'filep' else False,
                 parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
-                reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ),
+                reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
+                                                     [InlineKeyboardButton("🔞 Adult Content Channel",
+                                                                           url="https://t.me/eseoaOF")],
+                                                     [InlineKeyboardButton("🍺 Buy Me A Beer",
+                                                                           url="https://buymeacoffee.com/matthewmurdock001")],
+                                                     ] ),
             )
-        return
     
     if data.split("-", 1)[0] == "BATCH":
         sts = await message.reply("<b>Please wait...</b>")
@@ -199,7 +210,12 @@ async def start(client, message):
                     caption=f_caption,
                     protect_content=msg.get('protect', False),
                     parse_mode= enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
-                    reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ),
+                    reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
+                                                         [InlineKeyboardButton("🔞 Adult Content Channel",
+                                                                               url="https://t.me/eseoaOF")],
+                                                         [InlineKeyboardButton("🍺 Buy Me A Beer",
+                                                                               url="https://buymeacoffee.com/matthewmurdock001")],
+                                                         ] ),
                     
                 )
             except FloodWait as e:
@@ -211,14 +227,18 @@ async def start(client, message):
                     caption=f_caption,
                     parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
                     protect_content=msg.get('protect', False),
-                    reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ),
+                    reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
+                                                         [InlineKeyboardButton("🔞 Adult Content Channel",
+                                                                               url="https://t.me/eseoaOF")],
+                                                         [InlineKeyboardButton("🍺 Buy Me A Beer",
+                                                                               url="https://buymeacoffee.com/matthewmurdock001")],
+                                                         ] ),
                 )
             except Exception as e:
                 logger.warning(e, exc_info=True)
                 continue
             await asyncio.sleep(1) 
         await sts.delete()
-        return
     elif data.split("-", 1)[0] == "DSTORE":
         sts = await message.reply("<b>Please wait...</b>")
         b_string = data.split("-", 1)[1]
@@ -280,7 +300,12 @@ async def start(client, message):
                 file_id=file_id,
                 parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
                 protect_content=True if pre == 'filep' else False,
-                reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ),
+                reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
+                                                     [InlineKeyboardButton("🔞 Adult Content Channel",
+                                                                           url="https://t.me/eseoaOF")],
+                                                     [InlineKeyboardButton("🍺 Buy Me A Beer",
+                                                                           url="https://buymeacoffee.com/matthewmurdock001")],
+                                                     ] ),
             )
             filetype = msg.media
             file = getattr(msg, filetype.value)
@@ -319,13 +344,18 @@ async def start(client, message):
             f_caption=f_caption
     if f_caption is None:
         f_caption = f"{files.file_name}"
-    await client.send_cached_media(
+    return await client.send_cached_media(
         chat_id=message.from_user.id,
         file_id=file_id,
         caption=f_caption,
         parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
         protect_content=True if pre == 'filep' else False,
-        reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ),
+        reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
+                                             [InlineKeyboardButton("🔞 Adult Content Channel",
+                                                                   url="https://t.me/eseoaOF")],
+                                             [InlineKeyboardButton("🍺 Buy Me A Beer",
+                                                                   url="https://buymeacoffee.com/matthewmurdock001")],
+                                             ] ),
     )
                     
 
@@ -458,18 +488,18 @@ async def settings(client, message):
                 chat = await client.get_chat(grpid)
                 title = chat.title
             except:
-                await message.reply_text("Make sure I'm present in your group!!", quote=True)
-                return
+                return await message.reply_text("Make sure I'm present in your group!!", quote=True)
+
         else:
-            await message.reply_text("I'm not connected to any groups!", quote=True)
-            return
+            return await message.reply_text("I'm not connected to any groups!", quote=True)
+
 
     elif chat_type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
         grp_id = message.chat.id
         title = message.chat.title
 
     else:
-        return
+        return None
 
     st = await client.get_chat_member(grp_id, userid)
     if (
@@ -477,7 +507,7 @@ async def settings(client, message):
             and st.status != enums.ChatMemberStatus.OWNER
             and str(userid) not in info.ADMINS
     ):
-        return
+        return None
     
     settings = await get_settings(grp_id)
 
@@ -589,7 +619,7 @@ async def settings(client, message):
 
         reply_markup = InlineKeyboardMarkup(buttons)
         if chat_type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
-            await message.reply_text(
+            return await message.reply_text(
                 text="<b>𝖣𝗈 𝖸𝗈𝗎 𝖶𝖺𝗇𝗍 𝖳𝗈 𝖮𝗉𝖾𝗇 𝖲𝖾𝗍𝗍𝗂𝗇𝗀𝗌 𝖧𝖾𝗋𝖾 ?</b>",
                 reply_markup=InlineKeyboardMarkup(btn),
                 disable_web_page_preview=True,
@@ -597,13 +627,15 @@ async def settings(client, message):
                 reply_to_message_id=message.id
             )
         else:
-            await message.reply_text(
+            return await message.reply_text(
                 text=f"<b>𝖢𝗁𝖺𝗇𝗀𝖾 𝖸𝗈𝗎𝗋 𝖲𝖾𝗍𝗍𝗂𝗇𝗀𝗌 𝖥𝗈𝗋 {title} 𝖠𝗌 𝖸𝗈𝗎𝗋 𝖶𝗂𝗌𝗁</b>",
                 reply_markup=reply_markup,
                 disable_web_page_preview=True,
                 parse_mode=enums.ParseMode.HTML,
                 reply_to_message_id=message.id
             )
+
+
 
 @Client.on_message(filters.command("send") & filters.user(info.ADMINS))
 async def send_msg(bot, message):
@@ -867,15 +899,15 @@ async def requests(bot, message):
         return
 
     # Acknowledge successful request submission
-    if success:
-        if reported_post is None:
-            # If reported_post was never assigned, handle the error gracefully.
-            await message.reply_text("Error: Unable to process your request. Please try again later.")
-            return
-        btn = [[
-            InlineKeyboardButton('📥 𝖵𝗂𝖾𝗐 𝖱𝖾𝗊𝗎𝖾𝗌𝗍 📥', url=f"{reported_post.link}")
-        ]]
-        await message.reply_text("<b>Your request has been added! Please wait for some time.</b>", reply_markup=InlineKeyboardMarkup(btn))
+    # if success:
+    #     if reported_post is None:
+    #         # If reported_post was never assigned, handle the error gracefully.
+    #         await message.reply_text("Error: Unable to process your request. Please try again later.")
+    #         return
+    #     btn = [[
+    #         InlineKeyboardButton('📥 𝖵𝗂𝖾𝗐 𝖱𝖾𝗊𝗎𝖾𝗌𝗍 📥', url=f"{reported_post.link}")
+    #     ]]
+    #     await message.reply_text("<b>Your request has been added! Please wait for some time.</b>", reply_markup=InlineKeyboardMarkup(btn))
 
 
 @Client.on_message(filters.command("usend") & filters.user(info.ADMINS))
