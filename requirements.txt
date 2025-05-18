@@ -1,9 +1,9 @@
-pyrofork
-tgcrypto
-pymongo
-motor
-marshmallow
-umongo
+pyrofork==2.3.61
+tgcrypto==1.2.5
+pymongo==4.12.0
+motor==3.7.0
+marshmallow==3.26.1
+umongo==3.1.0
 requests
 bs4
 git+https://github.com/cinemagoer/cinemagoer
