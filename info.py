@@ -32,7 +32,8 @@ COLLECTION_NAME = environ.get('COLLECTION_NAME', 'FILES')
 # --- Non-Sensitive Settings (Should be saved in DB if not available) ---
 PORT = environ.get("PORT", "8000")
 SESSION = environ.get('SESSION', 'Media_search')
-
+UPSTREAM_REPO = environ.get('UPSTREAM_REPO', 'https://github.com/rumalg123/Autofilesndbot')
+UPSTREAM_BRANCH = environ.get('UPSTREAM_BRANCH', 'master')
 # Bot settings
 CACHE_TIME = int(environ.get('CACHE_TIME', 300))
 USE_CAPTION_FILTER = bool(environ.get('USE_CAPTION_FILTER', True))
@@ -110,7 +111,9 @@ LOG_STR += ("Spell Check Mode is enabled, the bot will suggest related movies if
             else "SPELL_CHECK_REPLY mode is disabled.\n")
 LOG_STR += (f"MAX_LIST_ELM found, long lists will be shortened to the first {MAX_LIST_ELM} elements.\n" if MAX_LIST_ELM
             else "Full list of casts and crew will be shown in the IMDB template; restrict them by adding a value to MAX_LIST_ELM.\n")
-LOG_STR += f"Your current IMDB template is {IMDB_TEMPLATE}"
+LOG_STR += f"Your current IMDB template is {IMDB_TEMPLATE}\n"
+LOG_STR += f"Upstream Repo {UPSTREAM_REPO}\n"
+LOG_STR += f"Upstream Branch {UPSTREAM_BRANCH}"
 
 # --- MongoDB Configuration Management Functions ---
 
