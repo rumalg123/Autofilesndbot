@@ -1161,6 +1161,9 @@ async def restart_bot(client, message):
     # Notify user about restart
     restart_msg = await message.reply_text("♻️ **Restarting bot...**\n\n*Updating code and restarting. Please wait.*")
 
+    if os.path.exists("Logs.txt"):
+        os.remove("Logs.txt")
+
     # Save chat and message ID for later status update
     with open(RESTART_FILE, "w") as f:
         f.write(f"{message.chat.id}|{restart_msg.id}")
@@ -1199,7 +1202,7 @@ async def update_restart_status(client):
                 await client.edit_message_text(
                     chat_id=int(chat_id),
                     message_id=int(message_id),
-                    text="✅ Successfully restarted!"
+                    text="✅ Successfully restarted! V1.0.1"
                 )
             except Exception as e:
                 print("Failed to update restart message:", e)
