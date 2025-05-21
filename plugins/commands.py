@@ -3,6 +3,8 @@ import logging
 import random
 import asyncio
 import sys
+
+
 from Script import script
 from pyrogram import Client, filters, enums
 from pyrogram.errors import ChatAdminRequired, FloodWait
@@ -1136,16 +1138,54 @@ async def ping(_, message):
     time_taken_s = (end_t - start_t) * 1000
     await rm.edit(f"𝖯𝗂𝗇𝗀!\n{time_taken_s:.3f} ms")
 
-@Client.on_message(filters.command("restart") & filters.user(info.ADMINS) &filters.private)
+# @Client.on_message(filters.command("restart") & filters.user(info.ADMINS) &filters.private)
+# async def restart_bot(client, message):
+#     status_msg = await message.reply_text("🔄 Updating code from UPSTREAM_REPO...")
+#     proc = await asyncio.create_subprocess_exec(
+#         sys.executable, "update.py",
+#         stdout=asyncio.subpr, stderr=STDOUT
+#     )
+#     stdout, _ = await proc.communicate()
+#     # Send a message and capture the returned message object
+#     restart_msg = await message.reply_text("♻️ Restarting bot... Please wait.")
+#     # Save the chat id and message id to a file (using a delimiter, e.g., "|")
+#     with open(RESTART_FILE, "w") as f:
+#         f.write(f"{message.chat.id}|{restart_msg.id}")
+#     # Wait a moment to ensure the message is sent
+#     await asyncio.sleep(2)
+#     # Restart the current process (Docker will auto-restart the container)
+#     os.execl(sys.executable, sys.executable, *sys.argv)
+
+@Client.on_message(filters.command("restart") & filters.user(info.ADMINS) & filters.private)
 async def restart_bot(client, message):
-    # Send a message and capture the returned message object
-    restart_msg = await message.reply_text("♻️ Restarting bot... Please wait.")
-    # Save the chat id and message id to a file (using a delimiter, e.g., "|")
+    # Notify user about restart
+    restart_msg = await message.reply_text("♻️ **Restarting bot...**\n\n*Updating code and restarting. Please wait.*")
+
+    # Save chat and message ID for later status update
     with open(RESTART_FILE, "w") as f:
         f.write(f"{message.chat.id}|{restart_msg.id}")
-    # Wait a moment to ensure the message is sent
-    await asyncio.sleep(2)
-    # Restart the current process (Docker will auto-restart the container)
+
+    # Run update.py to fetch latest code
+    try:
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, "update.py",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            error_msg = stderr.decode().strip()
+            logger.error(f"Update failed: {error_msg}")
+            await message.reply_text(f"❌ **Update failed!**\n\n`{error_msg}`")
+            return
+    except Exception as e:
+        logger.error(f"Error during update: {e}")
+        await message.reply_text(f"❌ **Update error!**\n\n`{str(e)}`")
+        return
+
+    # Restart the bot process
+    logger.info("✅ Update successful. Restarting bot...")
     os.execl(sys.executable, sys.executable, *sys.argv)
 
 
