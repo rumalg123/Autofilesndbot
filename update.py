@@ -7,9 +7,9 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-if ospath.exists('Logs.txt'):
-    with open('Logs.txt', 'r+') as f:
-        f.truncate(0)
+# if ospath.exists('Logs.txt'):
+#     with open('Logs.txt', 'r+') as f:
+#         f.truncate(0)
 
 load_dotenv(override=True)
 
