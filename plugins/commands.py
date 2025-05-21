@@ -49,7 +49,6 @@ async def start(client, message):
             total=await client.get_chat_members_count(message.chat.id)
             await client.send_message(info.LOG_CHANNEL, script.LOG_TEXT_G.format(message.chat.title, message.chat.id, total, "Unknown"))
             await db.add_chat(message.chat.id, message.chat.title)
-        return 
     if not await db.is_user_exist(message.from_user.id):
         await db.add_user(message.from_user.id, message.from_user.first_name)
         await client.send_message(info.LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
@@ -75,13 +74,11 @@ async def start(client, message):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
-        return
     if info.AUTH_CHANNEL and not await is_subscribed(client, message):
         try:
             invite_link = await client.create_chat_invite_link(int(info.AUTH_CHANNEL))
         except ChatAdminRequired:
             logger.error("Make sure Bot is admin in Force Sub channel")
-            return
         btn = [
             [
                 InlineKeyboardButton(
@@ -97,7 +94,7 @@ async def start(client, message):
                 btn.append([InlineKeyboardButton("⟳ 𝖳𝗋𝗒 𝖠𝗀𝖺𝗂𝗇 ⟳", callback_data=f"{pre}#{file_id}")])
             except (IndexError, ValueError):
                 btn.append([InlineKeyboardButton("⟳ 𝖳𝗋𝗒 𝖠𝗀𝖺𝗂𝗇 ⟳", url=f"https://t.me/{temp.U_NAME}?start={message.command[1]}")])
-        return await client.send_message(
+        await client.send_message(
             chat_id=message.from_user.id,
             text="**Please Join My Updates Channel to use this Bot!**",
             reply_markup=InlineKeyboardMarkup(btn),
@@ -126,7 +123,6 @@ async def start(client, message):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
-        return
     data = message.command[1]
     try:
         pre, file_id = data.split('_', 1)
@@ -136,9 +132,11 @@ async def start(client, message):
         
     if data.startswith("all"):
         _, key, pre = data.split("_", 2)
+        logger.info(f"Sending all files of {key} to {pre}")
         files = temp.FILES_IDS.get(key)
+        logger.info(files)
         if not files:
-            return await message.reply('<b><i>No such file exist.</b></i>')
+            await message.reply('<b><i>No such file exist.</b></i>')
         
         for file in files:
             title = file.file_name
@@ -157,7 +155,7 @@ async def start(client, message):
                     f_caption=f_caption
             if f_caption is None:
                 f_caption = f"{file.file_name}"
-            return await client.send_cached_media(
+            await client.send_cached_media(
                 chat_id=message.from_user.id,
                 file_id=file.file_id,
                 caption=f_caption,
@@ -182,7 +180,7 @@ async def start(client, message):
                     msgs=json.loads(file_data.read())
             except:
                 await sts.edit("FAILED")
-                return await client.send_message(info.LOG_CHANNEL, "UNABLE TO OPEN FILE.")
+                await client.send_message(info.LOG_CHANNEL, "UNABLE TO OPEN FILE.")
             os.remove(file)
             BATCH_FILES[file_id] = msgs
         for msg in msgs:
@@ -288,7 +286,7 @@ async def start(client, message):
                     logger.exception(e)
                     continue
             await asyncio.sleep(1) 
-        return await sts.delete()
+        await sts.delete()
         
 
     files_ = await get_file_details(file_id)           
@@ -320,13 +318,14 @@ async def start(client, message):
             elif info.CUSTOM_FILE_CAPTION:
                 try:
                     f_caption=info.CUSTOM_FILE_CAPTION.format(file_name= '' if title is None else title, file_size='' if size is None else size, file_caption='')
-                except:
-                    return
+                except Exception as e:
+                    logger.exception(e)
+                    f_caption=f_caption
+
             await msg.edit_caption(f_caption)
-            return
         except:
             pass
-        return await message.reply('<b><i>No such file exist.</b></i>')
+        await message.reply('<b><i>No such file exist.</b></i>')
     files = files_[0]
     title = files.file_name
     size=get_size(files.file_size)
@@ -344,7 +343,7 @@ async def start(client, message):
             f_caption=f_caption
     if f_caption is None:
         f_caption = f"{files.file_name}"
-    return await client.send_cached_media(
+    await client.send_cached_media(
         chat_id=message.from_user.id,
         file_id=file_id,
         caption=f_caption,
@@ -406,7 +405,6 @@ async def delete(bot, message):
         msg = await message.reply("Processing...⏳", quote=True)
     else:
         await message.reply('Reply to file with /delete which you want to delete', quote=True)
-        return
 
     for file_type in ("document", "video", "audio"):
         media = getattr(reply, file_type, None)
@@ -414,7 +412,6 @@ async def delete(bot, message):
             break
     else:
         await msg.edit('This is not supported file format')
-        return
     
     file_id, file_ref = unpack_new_file_id(media.file_id)
 
@@ -619,7 +616,7 @@ async def settings(client, message):
 
         reply_markup = InlineKeyboardMarkup(buttons)
         if chat_type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
-            return await message.reply_text(
+            await message.reply_text(
                 text="<b>𝖣𝗈 𝖸𝗈𝗎 𝖶𝖺𝗇𝗍 𝖳𝗈 𝖮𝗉𝖾𝗇 𝖲𝖾𝗍𝗍𝗂𝗇𝗀𝗌 𝖧𝖾𝗋𝖾 ?</b>",
                 reply_markup=InlineKeyboardMarkup(btn),
                 disable_web_page_preview=True,
@@ -627,7 +624,7 @@ async def settings(client, message):
                 reply_to_message_id=message.id
             )
         else:
-            return await message.reply_text(
+            await message.reply_text(
                 text=f"<b>𝖢𝗁𝖺𝗇𝗀𝖾 𝖸𝗈𝗎𝗋 𝖲𝖾𝗍𝗍𝗂𝗇𝗀𝗌 𝖥𝗈𝗋 {title} 𝖠𝗌 𝖸𝗈𝗎𝗋 𝖶𝗂𝗌𝗁</b>",
                 reply_markup=reply_markup,
                 disable_web_page_preview=True,
@@ -672,7 +669,7 @@ async def save_template(client, message):
     sts = await message.reply("Checking template")
     userid = message.from_user.id if message.from_user else None
     if not userid:
-        return await message.reply(f"You are anonymous admin. Use /connect {message.chat.id} in PM")
+        await message.reply(f"You are anonymous admin. Use /connect {message.chat.id} in PM")
     chat_type = message.chat.type
 
     if chat_type == enums.ChatType.PRIVATE:
@@ -684,10 +681,8 @@ async def save_template(client, message):
                 title = chat.title
             except:
                 await message.reply_text("Make sure I'm present in your group!!", quote=True)
-                return
         else:
             await message.reply_text("I'm not connected to any groups!", quote=True)
-            return
 
     elif chat_type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
         grp_id = message.chat.id
@@ -705,7 +700,7 @@ async def save_template(client, message):
         return
 
     if len(message.command) < 2:
-        return await sts.edit("No Input!!")
+        await sts.edit("No Input!!")
     template = message.text.split(" ", 1)[1]
     await save_group_settings(grp_id, 'template', template)
     await sts.edit(f"Successfully changed template for {title} to\n\n{template}")

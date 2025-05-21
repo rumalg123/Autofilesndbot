@@ -97,8 +97,8 @@ async def next_page(bot, query):
         offset = 0
     search = BUTTONS.get(key)
     if not search:
-        await query.answer(script.OLD_ALRT_TXT.format(query.from_user.first_name),show_alert=True)
-        return
+        return query.answer(script.OLD_ALRT_TXT.format(query.from_user.first_name),show_alert=True)
+
 
     files, n_offset, total = await get_search_results(query.message.chat.id, search, offset=offset, filter=True)
     try:
@@ -270,7 +270,7 @@ async def next_page(bot, query):
         )
     except MessageNotModified:
         pass
-    await query.answer()
+    return await query.answer()
 
 
 @Client.on_callback_query(filters.regex(r"^spol"))
@@ -612,6 +612,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
     elif query.data.startswith("send_all"):
         _, req, key, pre = query.data.split("#")
+        logger.info(f"{req} {key} {pre}")
         if int(req) not in [query.from_user.id, 0]:
             return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
         
