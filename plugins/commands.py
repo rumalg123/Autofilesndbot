@@ -134,9 +134,9 @@ async def start(client, message):
         
     if data.startswith("all"):
         _, key, pre = data.split("_", 2)
-        logger.info(f"Sending all files of {key} to {pre}")
+        #logger.info(f"Sending all files of {key} to {pre}")
         files = temp.FILES_IDS.get(key)
-        logger.info(files)
+        #logger.info(files)
         if not files:
             await message.reply('<b><i>No such file exist.</b></i>')
         
