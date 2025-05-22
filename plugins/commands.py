@@ -42,7 +42,7 @@ async def start(client, message):
                 ],[
                     InlineKeyboardButton('ꜱᴇᴀʀᴄʜ ᴅʀᴀᴍᴀꜱ', switch_inline_query_current_chat='')
                   ],
-        [InlineKeyboardButton("🔞 Adult Content Channel", url="https://t.me/eseoaOF")],
+        #[InlineKeyboardButton("🔞 Adult Content Channel", url="https://t.me/eseoaOF")],
         [InlineKeyboardButton("🍺 Buy Me A Beer", url="https://buymeacoffee.com/matthewmurdock001")],]
         reply_markup = InlineKeyboardMarkup(buttons)
         await message.reply(script.START_TXT.format(message.from_user.mention if message.from_user else message.chat.title, temp.U_NAME, temp.B_NAME), reply_markup=reply_markup)
@@ -66,7 +66,7 @@ async def start(client, message):
                 ],[
                     InlineKeyboardButton('ꜱᴇᴀʀᴄʜ ᴅʀᴀᴍᴀꜱ', switch_inline_query_current_chat='')
                   ],
-            [InlineKeyboardButton("🔞 Adult Content Channel", url="https://t.me/eseoaOF")],
+            #[InlineKeyboardButton("🔞 Adult Content Channel", url="https://t.me/eseoaOF")],
             [InlineKeyboardButton("🍺 Buy Me A Beer", url="https://buymeacoffee.com/matthewmurdock001")],
         ]
         reply_markup = InlineKeyboardMarkup(buttons)
@@ -115,7 +115,7 @@ async def start(client, message):
                     InlineKeyboardButton('ꜱᴇᴀʀᴄʜ ᴅʀᴀᴍᴀꜱ', switch_inline_query_current_chat='')
                     
                   ],
-            [InlineKeyboardButton("🔞 Adult Content Channel", url="https://t.me/eseoaOF")],
+            #[InlineKeyboardButton("🔞 Adult Content Channel", url="https://t.me/eseoaOF")],
             [InlineKeyboardButton("🍺 Buy Me A Beer", url="https://buymeacoffee.com/matthewmurdock001")],
         ]
         reply_markup = InlineKeyboardMarkup(buttons)
@@ -164,8 +164,8 @@ async def start(client, message):
                 protect_content=True if pre == 'filep' else False,
                 parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
                 reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
-                                                     [InlineKeyboardButton("🔞 Adult Content Channel",
-                                                                           url="https://t.me/eseoaOF")],
+                                                     # [InlineKeyboardButton("🔞 Adult Content Channel",
+                                                     #                       url="https://t.me/eseoaOF")],
                                                      [InlineKeyboardButton("🍺 Buy Me A Beer",
                                                                            url="https://buymeacoffee.com/matthewmurdock001")],
                                                      ] ),
@@ -211,8 +211,8 @@ async def start(client, message):
                     protect_content=msg.get('protect', False),
                     parse_mode= enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
                     reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
-                                                         [InlineKeyboardButton("🔞 Adult Content Channel",
-                                                                               url="https://t.me/eseoaOF")],
+                                                         # [InlineKeyboardButton("🔞 Adult Content Channel",
+                                                         #                       url="https://t.me/eseoaOF")],
                                                          [InlineKeyboardButton("🍺 Buy Me A Beer",
                                                                                url="https://buymeacoffee.com/matthewmurdock001")],
                                                          ] ),
@@ -228,8 +228,8 @@ async def start(client, message):
                     parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
                     protect_content=msg.get('protect', False),
                     reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
-                                                         [InlineKeyboardButton("🔞 Adult Content Channel",
-                                                                               url="https://t.me/eseoaOF")],
+                                                         # [InlineKeyboardButton("🔞 Adult Content Channel",
+                                                         #                       url="https://t.me/eseoaOF")],
                                                          [InlineKeyboardButton("🍺 Buy Me A Beer",
                                                                                url="https://buymeacoffee.com/matthewmurdock001")],
                                                          ] ),
@@ -301,8 +301,8 @@ async def start(client, message):
                 parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
                 protect_content=True if pre == 'filep' else False,
                 reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
-                                                     [InlineKeyboardButton("🔞 Adult Content Channel",
-                                                                           url="https://t.me/eseoaOF")],
+                                                     # [InlineKeyboardButton("🔞 Adult Content Channel",
+                                                     #                       url="https://t.me/eseoaOF")],
                                                      [InlineKeyboardButton("🍺 Buy Me A Beer",
                                                                            url="https://buymeacoffee.com/matthewmurdock001")],
                                                      ] ),
@@ -352,8 +352,8 @@ async def start(client, message):
         parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
         protect_content=True if pre == 'filep' else False,
         reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
-                                             [InlineKeyboardButton("🔞 Adult Content Channel",
-                                                                   url="https://t.me/eseoaOF")],
+                                             # [InlineKeyboardButton("🔞 Adult Content Channel",
+                                             #                       url="https://t.me/eseoaOF")],
                                              [InlineKeyboardButton("🍺 Buy Me A Beer",
                                                                    url="https://buymeacoffee.com/matthewmurdock001")],
                                              ] ),
@@ -1202,7 +1202,7 @@ async def update_restart_status(client):
                 await client.edit_message_text(
                     chat_id=int(chat_id),
                     message_id=int(message_id),
-                    text="✅ Successfully restarted! V1.0.1"
+                    text="✅ Successfully restarted! V1.0.2"
                 )
             except Exception as e:
                 print("Failed to update restart message:", e)
