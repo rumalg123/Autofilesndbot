@@ -1202,7 +1202,7 @@ async def update_restart_status(client):
                 await client.edit_message_text(
                     chat_id=int(chat_id),
                     message_id=int(message_id),
-                    text="✅ Successfully restarted! V1.0.1"
+                    text="✅ Successfully restarted! V1.0.2"
                 )
             except Exception as e:
                 print("Failed to update restart message:", e)
