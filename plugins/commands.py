@@ -37,48 +37,65 @@ async def check_user_access(client, message, user_id):
         return True, "Owner access: Unlimited"
 
     user_data = await db.get_user_data(user_id)
-    if not user_data: # Should ideally not happen if add_user is called first
-        # Treat as a new non-premium user for safety
-        new_count_for_new_user = await db.increment_retrieval_count(user_id) # This will effectively set count to 1 for a new day
+
+    if not user_data:
+        # New user handling
+        if message and message.from_user: # Ensure message and from_user are available
+            await db.add_user(user_id, message.from_user.first_name)
+        else: # Fallback if message or from_user is not available (e.g. inline query context)
+            await db.add_user(user_id, f"User {user_id}") # Or handle error more explicitly
+
+        new_count_for_new_user = await db.increment_retrieval_count(user_id)
         if new_count_for_new_user > info.NON_PREMIUM_DAILY_LIMIT:
+            # This case should ideally not be hit for a brand new user if limit > 0
             return False, f"You have reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access."
-        return True, "Non-premium access (new or no data)"
+        return True, "Non-premium access (new user)"
 
+    # Check for premium status
     if user_data.get('is_premium'):
-        activation_date = user_data.get('premium_activation_date')
-        if activation_date:
-            # Ensure activation_date is datetime object if it's stored as string/timestamp
-            if isinstance(activation_date, str):
-                activation_date = datetime.fromisoformat(activation_date)
-            elif isinstance(activation_date, (int, float)): # Assuming timestamp
-                activation_date = datetime.fromtimestamp(activation_date)
-
-            expiry_date = activation_date + timedelta(days=info.PREMIUM_DURATION_DAYS)
-            if datetime.now() > expiry_date:
-                await db.update_premium_status(user_id, False)
-                await message.reply_text("Your premium subscription has expired. You are now on the free plan.")
-                # Fall through to non-premium check by re-running logic
-                new_count_after_expiry = await db.increment_retrieval_count(user_id)
-                if new_count_after_expiry > info.NON_PREMIUM_DAILY_LIMIT:
-                    return False, f"Your premium has expired and you have reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access."
-                return True, "Premium expired, now non-premium access within limit"
+        activation_date_val = user_data.get('premium_activation_date')
+        if activation_date_val:
+            activation_date = None
+            if isinstance(activation_date_val, str):
+                try:
+                    activation_date = datetime.fromisoformat(activation_date_val)
+                except ValueError: # Handle cases where date might be in old format or corrupted
+                    # Log error or handle as invalid premium state
+                    logger.error(f"Invalid premium_activation_date format for user {user_id}: {activation_date_val}")
+                    # Fall through to non-premium logic by not setting activation_date
+            elif isinstance(activation_date_val, (int, float)): # Assuming timestamp
+                activation_date = datetime.fromtimestamp(activation_date_val)
+            elif isinstance(activation_date_val, datetime): # Already a datetime object
+                activation_date = activation_date_val
             else:
-                await db.increment_retrieval_count(user_id) # Track premium user usage
-                return True, "Premium access"
-        else: # Premium flag is true but no activation date, treat as error or non-premium
-            # This case should ideally not happen with correct logic in addpremium
-            pass # Falls through to non-premium
+                logger.error(f"Unknown premium_activation_date type for user {user_id}: {type(activation_date_val)}")
+                # Fall through
 
-    # Non-premium user logic (or expired premium)
-    # increment_retrieval_count handles daily reset.
-    # The function in db now needs to return the count *after* incrementing.
-    # Let's assume for now it does, or we fetch again.
-    # Based on subtask description, db.increment_retrieval_count is called, then get_user_data
-    # Updated: increment_retrieval_count now returns the new count.
+            if activation_date: # If date was successfully parsed
+                expiry_date = activation_date + timedelta(days=info.PREMIUM_DURATION_DAYS)
+                if datetime.now() > expiry_date:
+                    await db.update_premium_status(user_id, False)
+                    if message: # Ensure message object is available to reply
+                        try:
+                            await message.reply_text("Your premium subscription has expired. You are now on the free plan.")
+                        except Exception as e:
+                            logger.error(f"Failed to send premium expiry message to {user_id}: {e}")
+                    # Proceed to non-premium check for this session
+                else:
+                    # Premium is active
+                    await db.increment_retrieval_count(user_id) # Track usage for premium users
+                    return True, "Premium access"
+        # If activation_date_val is None or parsing failed, or if premium expired, fall through to non-premium logic
+
+    # Non-premium user logic (or expired premium, or premium with issues)
     new_retrieval_count = await db.increment_retrieval_count(user_id)
     
     if new_retrieval_count > info.NON_PREMIUM_DAILY_LIMIT:
-        return False, f"You have reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access."
+        limit_msg = f"You have reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access."
+        # Check if premium had just expired in this same call
+        if user_data.get('is_premium') and 'expiry_date' in locals() and datetime.now() > expiry_date: # expiry_date would be defined if premium was checked
+             limit_msg = f"Your premium has expired and you have now reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access."
+        return False, limit_msg
     
     return True, "Non-premium access"
 
