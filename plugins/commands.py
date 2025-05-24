@@ -20,6 +20,7 @@ import re
 import json
 import base64
 import time
+from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 RESTART_FILE = "restart_msg.txt"
@@ -27,6 +28,116 @@ RESTART_FILE = "restart_msg.txt"
 BATCH_FILES = {}
 
 CMD = ["/", "."]
+
+OWNER_ID = info.ADMINS[0] if info.ADMINS else None
+
+async def check_user_access(client, message, user_id):
+    """Checks user access, handles premium status, and daily limits."""
+    if OWNER_ID and user_id == OWNER_ID:
+        return True, "Owner access: Unlimited"
+
+    user_data = await db.get_user_data(user_id)
+    if not user_data: # Should ideally not happen if add_user is called first
+        # Treat as a new non-premium user for safety
+        new_count_for_new_user = await db.increment_retrieval_count(user_id) # This will effectively set count to 1 for a new day
+        if new_count_for_new_user > info.NON_PREMIUM_DAILY_LIMIT:
+            return False, f"You have reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access."
+        return True, "Non-premium access (new or no data)"
+
+    if user_data.get('is_premium'):
+        activation_date = user_data.get('premium_activation_date')
+        if activation_date:
+            # Ensure activation_date is datetime object if it's stored as string/timestamp
+            if isinstance(activation_date, str):
+                activation_date = datetime.fromisoformat(activation_date)
+            elif isinstance(activation_date, (int, float)): # Assuming timestamp
+                activation_date = datetime.fromtimestamp(activation_date)
+
+            expiry_date = activation_date + timedelta(days=info.PREMIUM_DURATION_DAYS)
+            if datetime.now() > expiry_date:
+                await db.update_premium_status(user_id, False)
+                await message.reply_text("Your premium subscription has expired. You are now on the free plan.")
+                # Fall through to non-premium check by re-running logic
+                new_count_after_expiry = await db.increment_retrieval_count(user_id)
+                if new_count_after_expiry > info.NON_PREMIUM_DAILY_LIMIT:
+                    return False, f"Your premium has expired and you have reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access."
+                return True, "Premium expired, now non-premium access within limit"
+            else:
+                await db.increment_retrieval_count(user_id) # Track premium user usage
+                return True, "Premium access"
+        else: # Premium flag is true but no activation date, treat as error or non-premium
+            # This case should ideally not happen with correct logic in addpremium
+            pass # Falls through to non-premium
+
+    # Non-premium user logic (or expired premium)
+    # increment_retrieval_count handles daily reset.
+    # The function in db now needs to return the count *after* incrementing.
+    # Let's assume for now it does, or we fetch again.
+    # Based on subtask description, db.increment_retrieval_count is called, then get_user_data
+    # Updated: increment_retrieval_count now returns the new count.
+    new_retrieval_count = await db.increment_retrieval_count(user_id)
+    
+    if new_retrieval_count > info.NON_PREMIUM_DAILY_LIMIT:
+        return False, f"You have reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access."
+    
+    return True, "Non-premium access"
+
+@Client.on_message(filters.command("addpremium") & filters.user(OWNER_ID if OWNER_ID else []))
+async def add_premium_command(client, message):
+    if not OWNER_ID:
+        return await message.reply_text("Owner ID not configured.")
+    if len(message.command) < 2:
+        return await message.reply_text("Usage: /addpremium <user_id>")
+    try:
+        user_id_to_add = int(message.command[1])
+    except ValueError:
+        return await message.reply_text("Invalid user ID format.")
+
+    if not await db.is_user_exist(user_id_to_add):
+        # Optionally add the user if they don't exist, or instruct the owner to have the user start the bot first.
+        # For now, let's assume the user must exist.
+        return await message.reply_text(f"User {user_id_to_add} not found in the database. They need to start the bot first.")
+
+    await db.update_premium_status(user_id_to_add, True)
+    # Fetch user's first name to make the message more personal
+    try:
+        user_info = await client.get_users(user_id_to_add)
+        user_mention = user_info.mention if user_info else f"`{user_id_to_add}`"
+    except Exception:
+        user_mention = f"`{user_id_to_add}`"
+    
+    await message.reply_text(f"Successfully upgraded {user_mention} to premium.")
+    try:
+        await client.send_message(user_id_to_add, "Congratulations! You have been upgraded to premium status.")
+    except Exception:
+        await message.reply_text(f"Could not notify user {user_mention} directly (they might have blocked the bot or not started a chat).")
+
+@Client.on_message(filters.command("removepremium") & filters.user(OWNER_ID if OWNER_ID else []))
+async def remove_premium_command(client, message):
+    if not OWNER_ID:
+        return await message.reply_text("Owner ID not configured.")
+    if len(message.command) < 2:
+        return await message.reply_text("Usage: /removepremium <user_id>")
+    try:
+        user_id_to_remove = int(message.command[1])
+    except ValueError:
+        return await message.reply_text("Invalid user ID format.")
+
+    if not await db.is_user_exist(user_id_to_remove):
+        return await message.reply_text(f"User {user_id_to_remove} not found in the database.")
+
+    await db.update_premium_status(user_id_to_remove, False)
+    try:
+        user_info = await client.get_users(user_id_to_remove)
+        user_mention = user_info.mention if user_info else f"`{user_id_to_remove}`"
+    except Exception:
+        user_mention = f"`{user_id_to_remove}`"
+
+    await message.reply_text(f"Successfully removed premium status from {user_mention}.")
+    try:
+        await client.send_message(user_id_to_remove, "Your premium status has been removed.")
+    except Exception:
+        await message.reply_text(f"Could not notify user {user_mention} directly.")
 
 @Client.on_message(filters.command("start") & filters.incoming)
 async def start(client, message):
@@ -54,6 +165,9 @@ async def start(client, message):
     if not await db.is_user_exist(message.from_user.id):
         await db.add_user(message.from_user.id, message.from_user.first_name)
         await client.send_message(info.LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
+
+    user_id = message.from_user.id
+
     if len(message.command) != 2:
         buttons = [[
                     InlineKeyboardButton('➕ ᴀᴅᴅ ᴍᴇ ᴛᴏ ɢʀᴏᴜᴘ ➕', url=f"https://t.me/{temp.U_NAME}?startgroup=true")
@@ -76,6 +190,30 @@ async def start(client, message):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+        # No file access here, so no check_user_access needed yet
+        return # Exit if it's just a /start command without arguments
+
+    # From here, message.command[1] is expected to exist.
+    # This is where file access logic begins, so place check_user_access upfront for single file logic.
+    # For multi-file logic (batch, all), the check will be inside their loops.
+            
+    data = message.command[1]
+    try:
+        pre, file_id_check = data.split('_', 1)
+    except:
+        file_id_check = data # data itself is the file_id or another command like "BATCH-xxx"
+        pre = ""
+
+    # Only apply general access check if it's potentially a direct file request
+    # BATCH, DSTORE, and "all" will have checks inside their loops
+    is_direct_file_request = not (data.startswith("all") or data.split("-", 1)[0] in ["BATCH", "DSTORE"])
+
+    if is_direct_file_request:
+        can_access, reason = await check_user_access(client, message, user_id)
+        if not can_access:
+            await message.reply_text(reason)
+            return
+
     if info.AUTH_CHANNEL and not await is_subscribed(client, message):
         try:
             invite_link = await client.create_chat_invite_link(int(info.AUTH_CHANNEL))
@@ -97,12 +235,14 @@ async def start(client, message):
             except (IndexError, ValueError):
                 btn.append([InlineKeyboardButton("⟳ 𝖳𝗋𝗒 𝖠𝗀𝖺𝗂𝗇 ⟳", url=f"https://t.me/{temp.U_NAME}?start={message.command[1]}")])
         await client.send_message(
-            chat_id=message.from_user.id,
+            chat_id=user_id,
             text="**Please Join My Updates Channel to use this Bot!**",
             reply_markup=InlineKeyboardMarkup(btn),
             parse_mode=enums.ParseMode.MARKDOWN
             )
-    if len(message.command) == 2 and message.command[1] in ["subscribe", "error", "okay", "help"]:
+        return # Stop further processing if force sub is triggered
+
+    if len(message.command) == 2 and message.command[1] in ["subscribe", "error", "okay", "help"]: # these are not file requests
         buttons = [[
                     InlineKeyboardButton('➕ ᴀᴅᴅ ᴍᴇ ᴛᴏ ɢʀᴏᴜᴘ ➕', url=f"https://t.me/{temp.U_NAME}?startgroup=true")
                 ],[
@@ -125,111 +265,142 @@ async def start(client, message):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
-    data = message.command[1]
-    try:
-        pre, file_id = data.split('_', 1)
-    except:
-        file_id = data
-        pre = ""
+    # data = message.command[1] # already defined
+    # try: # already defined
+    #     pre, file_id = data.split('_', 1)
+    # except:
+    #     file_id = data
+    #     pre = ""
         
     if data.startswith("all"):
-        _, key, pre = data.split("_", 2)
-        #logger.info(f"Sending all files of {key} to {pre}")
+        _, key, pre_type = data.split("_", 2) # pre_type to avoid conflict with outer 'pre'
         files = temp.FILES_IDS.get(key)
-        #logger.info(files)
         if not files:
             await message.reply('<b><i>No such file exist.</b></i>')
+            return # Added return
         
-        for file in files:
-            title = file.file_name
-            size=get_size(file.file_size)
-            #f_caption=file.caption
+        for file_item in files: # Renamed to file_item
+            # Access check for each file in the "all" list
+            can_access, reason = await check_user_access(client, message, user_id)
+            if not can_access:
+                await message.reply_text(f"Access denied for {file_item.file_name}: {reason}")
+                continue # Skip this file
+
+            title = file_item.file_name
+            size=get_size(file_item.file_size)
+            f_caption = None
             f_caption = None
             if info.KEEP_ORIGINAL_CAPTION:
                 try:
-                    f_caption = file.caption
+                    f_caption = file_item.caption
                 except :
-                    f_caption = file.file_name
+                    f_caption = file_item.file_name
             elif info.CUSTOM_FILE_CAPTION:
                 try:
-                    f_caption=info.CUSTOM_FILE_CAPTION.format(file_name= '' if title is None else title, file_size='' if size is None else size, file_caption='' if f_caption is None else f_caption)
+                    f_caption=info.CUSTOM_FILE_CAPTION.format(file_name= '' if title is None else title, file_size='' if size is None else size, file_caption='' if getattr(file_item, 'caption', None) is None else file_item.caption)
                 except:
-                    f_caption=f_caption
+                    f_caption=getattr(file_item, 'caption', file_item.file_name) # Fallback
             if f_caption is None:
-                f_caption = f"{file.file_name}"
+                f_caption = f"{file_item.file_name}"
+
             await client.send_cached_media(
-                chat_id=message.from_user.id,
-                file_id=file.file_id,
+                chat_id=user_id,
+                file_id=file_item.file_id,
                 caption=f_caption,
-                protect_content=True if pre == 'filep' else False,
+                protect_content=True if pre_type == 'filep' else False, # Use pre_type
                 parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
                 reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
-                                                     # [InlineKeyboardButton("🔞 Adult Content Channel",
-                                                     #                       url="https://t.me/eseoaOF")],
                                                      [InlineKeyboardButton("🍺 Buy Me A Beer",
                                                                            url="https://buymeacoffee.com/matthewmurdock001")],
                                                      ] ),
             )
-    
+        return # Added return after processing "all"
+
     if data.split("-", 1)[0] == "BATCH":
-        sts = await message.reply("<b>Please wait...</b>")
-        file_id = data.split("-", 1)[1]
-        msgs = BATCH_FILES.get(file_id)
+        sts = await message.reply("<b>Processing batch...</b>")
+        batch_file_id = data.split("-", 1)[1] # Renamed to batch_file_id
+        msgs = BATCH_FILES.get(batch_file_id)
         if not msgs:
-            file = await client.download_media(file_id)
-            try: 
-                with open(file) as file_data:
-                    msgs=json.loads(file_data.read())
-            except:
-                await sts.edit("FAILED")
-                await client.send_message(info.LOG_CHANNEL, "UNABLE TO OPEN FILE.")
-            os.remove(file)
-            BATCH_FILES[file_id] = msgs
-        for msg in msgs:
-            title = msg.get("title")
-            size=get_size(int(msg.get("size", 0)))
-            #f_caption=msg.get("caption", "")
+            # file_id was from pre, file_id = data.split('_', 1) or file_id = data
+            # This part of the code seems to have a bug if `data` was "BATCH-somebatchfileid",
+            # then `file_id` would be undefined here.
+            # It should use `batch_file_id` for downloading.
+            download_target_id = batch_file_id 
+            try:
+                file_path = await client.download_media(download_target_id)
+                if file_path: # download_media returns path on success
+                    with open(file_path) as file_data:
+                        msgs = json.loads(file_data.read())
+                    os.remove(file_path)
+                    BATCH_FILES[batch_file_id] = msgs # Store with the correct ID
+                else:
+                    raise Exception("Download failed, no path returned.")
+            except FileNotFoundError:
+                logger.error(f"Batch file (ID: {download_target_id}) not found after attempting download.")
+                await sts.edit("FAILED: Batch file definition not found.")
+                return
+            except json.JSONDecodeError:
+                logger.error(f"Batch file (ID: {download_target_id}) is not a valid JSON.")
+                await sts.edit("FAILED: Batch file format error.")
+                if file_path and os.path.exists(file_path): # Clean up if download happened but was invalid
+                    os.remove(file_path)
+                return
+            except Exception as e:
+                logger.error(f"Failed to load batch file (ID: {download_target_id}): {e}", exc_info=True)
+                await sts.edit("FAILED: Could not process batch file.")
+                if 'file_path' in locals() and file_path and os.path.exists(file_path): # Clean up
+                     os.remove(file_path)
+                return
+
+        if not msgs: # Check again if msgs could not be loaded
+            await sts.edit("FAILED: Batch data unavailable.")
+            return
+
+        for msg_item in msgs: # Renamed to msg_item
+            # Access check for each file in BATCH
+            can_access, reason = await check_user_access(client, message, user_id)
+            if not can_access:
+                await message.reply_text(f"Access denied for file in batch: {reason} (File: {msg_item.get('title', 'N/A')})")
+                continue
+
+            title = msg_item.get("title")
+            size=get_size(int(msg_item.get("size", 0)))
             f_caption = None
             if info.KEEP_ORIGINAL_CAPTION:
                 try:
-                    f_caption = msg.get("caption")
+                    f_caption = msg_item.get("caption")
                 except:
-                    f_caption = msg.get("title")
+                    f_caption = msg_item.get("title")
             elif info.BATCH_FILE_CAPTION:
                 try:
-                    f_caption=info.BATCH_FILE_CAPTION.format(file_name= '' if title is None else title, file_size='' if size is None else size, file_caption='' if f_caption is None else f_caption)
+                    f_caption=info.BATCH_FILE_CAPTION.format(file_name= '' if title is None else title, file_size='' if size is None else size, file_caption='' if msg_item.get("caption") is None else msg_item.get("caption"))
                 except Exception as e:
                     logger.exception(e)
-                    f_caption=f_caption
+                    f_caption=msg_item.get("caption",title) # Fallback
             if f_caption is None:
                 f_caption = f"{title}"
             try:
                 await client.send_cached_media(
-                    chat_id=message.from_user.id,
-                    file_id=msg.get("file_id"),
+                    chat_id=user_id,
+                    file_id=msg_item.get("file_id"),
                     caption=f_caption,
-                    protect_content=msg.get('protect', False),
+                    protect_content=msg_item.get('protect', False),
                     parse_mode= enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
                     reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
-                                                         # [InlineKeyboardButton("🔞 Adult Content Channel",
-                                                         #                       url="https://t.me/eseoaOF")],
                                                          [InlineKeyboardButton("🍺 Buy Me A Beer",
                                                                                url="https://buymeacoffee.com/matthewmurdock001")],
                                                          ] ),
-                    
                 )
             except FloodWait as e:
-                await asyncio.sleep(e.x) # type: ignore[attr-defined]
-                logger.warning(f"Floodwait of {e.x} sec.") # type: ignore[attr-defined]
+                await asyncio.sleep(e.x) 
+                logger.warning(f"Floodwait of {e.x} sec.")
                 await client.send_cached_media(
-                    chat_id=message.from_user.id,
-                    file_id=msg.get("file_id"),
+                    chat_id=user_id,
+                    file_id=msg_item.get("file_id"),
                     caption=f_caption,
                     parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
-                    protect_content=msg.get('protect', False),
+                    protect_content=msg_item.get('protect', False),
                     reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
-                                                         # [InlineKeyboardButton("🔞 Adult Content Channel",
-                                                         #                       url="https://t.me/eseoaOF")],
                                                          [InlineKeyboardButton("🍺 Buy Me A Beer",
                                                                                url="https://buymeacoffee.com/matthewmurdock001")],
                                                          ] ),
@@ -237,10 +408,12 @@ async def start(client, message):
             except Exception as e:
                 logger.warning(e, exc_info=True)
                 continue
-            await asyncio.sleep(1) 
+            await asyncio.sleep(1)
         await sts.delete()
+        return # Added return
+
     elif data.split("-", 1)[0] == "DSTORE":
-        sts = await message.reply("<b>Please wait...</b>")
+        sts = await message.reply("<b>Processing stored files...</b>")
         b_string = data.split("-", 1)[1]
         decoded = (base64.urlsafe_b64decode(b_string + "=" * (-len(b_string) % 4))).decode("ascii")
         try:
@@ -249,57 +422,112 @@ async def start(client, message):
             f_msg_id, l_msg_id, f_chat_id = decoded.split("_", 2)
             protect = "/pbatch" if info.PROTECT_CONTENT else "batch"
         diff = int(l_msg_id) - int(f_msg_id)
-        async for msg in client.iter_messages(int(f_chat_id), int(l_msg_id), int(f_msg_id)):
-            if msg.media:
-                media = getattr(msg, msg.media.value)
+        async for dstore_msg_item in client.iter_messages(int(f_chat_id), int(l_msg_id), int(f_msg_id)): # Renamed
+            # Access check for each file in DSTORE
+            can_access, reason = await check_user_access(client, message, user_id)
+            if not can_access:
+                # Cannot easily get file name here before copying, so generic message
+                await message.reply_text(f"Access denied for a file in stored batch: {reason}")
+                continue 
 
+            if dstore_msg_item.media:
+                media = getattr(dstore_msg_item, dstore_msg_item.media.value)
+                f_caption = None
                 if info.KEEP_ORIGINAL_CAPTION:
                     try:
-                        f_caption = getattr(msg,'caption','')
+                        f_caption = getattr(dstore_msg_item,'caption','')
                     except:
                         f_caption = getattr(media, 'file_name', '')
-                elif info.BATCH_FILE_CAPTION:
+                elif info.BATCH_FILE_CAPTION: # Using BATCH_FILE_CAPTION for DSTORE as well
                     try:
-                        f_caption=info.BATCH_FILE_CAPTION.format(file_name=getattr(media, 'file_name', ''), file_size=getattr(media, 'file_size', ''), file_caption=getattr(msg, 'caption', ''))
+                        f_caption=info.BATCH_FILE_CAPTION.format(file_name=getattr(media, 'file_name', ''), file_size=getattr(media, 'file_size', 0), file_caption=getattr(dstore_msg_item, 'caption', ''))
                     except Exception as e:
                         logger.exception(e)
-                        f_caption = getattr(msg, 'caption', '')
-                else:
-                    media = getattr(msg, msg.media.value)
+                        f_caption = getattr(dstore_msg_item, 'caption', '')
+                else: # Fallback
                     file_name = getattr(media, 'file_name', '')
-                    f_caption = getattr(msg, 'caption', file_name)
+                    f_caption = getattr(dstore_msg_item, 'caption', file_name)
                 try:
-                    await msg.copy(message.chat.id, caption=f_caption, protect_content=True if protect == "/pbatch" else False,)
+                    await dstore_msg_item.copy(user_id, caption=f_caption, protect_content=True if protect == "/pbatch" else False)
                 except FloodWait as e:
-                    await asyncio.sleep(e.x) # type: ignore[attr-defined]
-                    await msg.copy(message.chat.id, caption=f_caption, protect_content=True if protect == "/pbatch" else False)
+                    await asyncio.sleep(e.x)
+                    await dstore_msg_item.copy(user_id, caption=f_caption, protect_content=True if protect == "/pbatch" else False)
                 except Exception as e:
                     logger.exception(e)
                     continue
-            elif msg.empty:
+            elif dstore_msg_item.empty:
                 continue
-            else:
+            else: # Non-media message
                 try:
-                    await msg.copy(message.chat.id, protect_content=True if protect == "/pbatch" else False)
+                    await dstore_msg_item.copy(user_id, protect_content=True if protect == "/pbatch" else False)
                 except FloodWait as e:
-                    await asyncio.sleep(e.x) # type: ignore[attr-defined]
-                    await msg.copy(message.chat.id, protect_content=True if protect == "/pbatch" else False)
+                    await asyncio.sleep(e.x)
+                    await dstore_msg_item.copy(user_id, protect_content=True if protect == "/pbatch" else False)
                 except Exception as e:
                     logger.exception(e)
                     continue
-            await asyncio.sleep(1) 
+            await asyncio.sleep(1)
         await sts.delete()
-        
+        return # Added return
 
-    files_ = await get_file_details(file_id)           
+    # This is the final block for single file requests (direct or base64 encoded)
+    # The user access check was already performed if is_direct_file_request was true.
+    # If it was a BATCH/DSTORE/all, it would have returned by now.
+
+    actual_file_id = None
+    actual_pre = pre # Use the 'pre' from initial parsing of 'data'
+
+    files_ = await get_file_details(file_id_check) # Use file_id_check from initial parsing
     if not files_:
-        pre, file_id = ((base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))).decode("ascii")).split("_", 1)
         try:
-            msg = await client.send_cached_media(
-                chat_id=message.from_user.id,
-                file_id=file_id,
-                parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
-                protect_content=True if pre == 'filep' else False,
+            # Attempt to decode if it wasn't a direct match
+            decoded_data = (base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))).decode("ascii")
+            actual_pre, actual_file_id = decoded_data.split("_", 1)
+            files_ = await get_file_details(actual_file_id) # Try fetching with decoded ID
+        except Exception: # Includes ValueError from split, or BinasciiError
+            await message.reply('<b><i>No such file exist (error during decoding or final lookup).</b></i>')
+            return
+    
+    if not files_:
+        await message.reply('<b><i>No such file exist.</b></i>')
+        return
+
+    # If we reached here, files_ is populated, either from direct file_id_check or decoded actual_file_id
+    # The access check for direct file_id_check (is_direct_file_request) was done at the top.
+    # If it was a decoded one, the check might not have been done if it didn't look like a direct request initially.
+    # However, the current structure of check at the top should cover it if it's not BATCH/DSTORE/all.
+
+    # Let's ensure actual_file_id and actual_pre are set correctly for sending
+    if not actual_file_id: # If not set by decoding block, it means original file_id_check was used
+        actual_file_id = file_id_check
+        # 'actual_pre' is already 'pre'
+
+    # Send the file using 'actual_file_id' and 'actual_pre'
+    db_file_entry = files_[0] # Assuming get_file_details returns a list
+    title = db_file_entry.file_name
+    size=get_size(db_file_entry.file_size)
+    f_caption=db_file_entry.caption # Original caption from DB
+
+    # Apply custom caption logic
+    if info.KEEP_ORIGINAL_CAPTION:
+        # f_caption is already what we want
+        pass
+    elif info.CUSTOM_FILE_CAPTION:
+        try:
+            f_caption=info.CUSTOM_FILE_CAPTION.format(file_name= '' if title is None else title, file_size='' if size is None else size, file_caption='' if f_caption is None else f_caption)
+        except Exception as e:
+            logger.exception(e)
+            # Keep original f_caption if template fails
+    
+    if f_caption is None: # Fallback if all else fails
+        f_caption = f"{title}"
+
+    await client.send_cached_media(
+        chat_id=user_id,
+        file_id=actual_file_id,
+        caption=f_caption,
+        parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION or info.CUSTOM_FILE_CAPTION else enums.ParseMode.DEFAULT, # Adjusted condition
+        protect_content=True if actual_pre == 'filep' else False,
                 reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
                                                      # [InlineKeyboardButton("🔞 Adult Content Channel",
                                                      #                       url="https://t.me/eseoaOF")],
@@ -307,57 +535,6 @@ async def start(client, message):
                                                                            url="https://buymeacoffee.com/matthewmurdock001")],
                                                      ] ),
             )
-            filetype = msg.media
-            file = getattr(msg, filetype.value)
-            title = file.file_name
-            size=get_size(file.file_size)
-            f_caption = f"<code>{title}</code>"
-            if info.KEEP_ORIGINAL_CAPTION:
-                try:
-                    f_caption = file.caption
-                except:
-                    f_caption = f"<code>{title}</code>"
-            elif info.CUSTOM_FILE_CAPTION:
-                try:
-                    f_caption=info.CUSTOM_FILE_CAPTION.format(file_name= '' if title is None else title, file_size='' if size is None else size, file_caption='')
-                except Exception as e:
-                    logger.exception(e)
-                    f_caption=f_caption
-
-            await msg.edit_caption(f_caption)
-        except:
-            pass
-        await message.reply('<b><i>No such file exist.</b></i>')
-    files = files_[0]
-    title = files.file_name
-    size=get_size(files.file_size)
-    f_caption=files.caption
-    if info.KEEP_ORIGINAL_CAPTION:
-        try:
-            f_caption = files.caption
-        except:
-            f_caption = f"<code>{title}</code>"
-    elif info.CUSTOM_FILE_CAPTION:
-        try:
-            f_caption=info.CUSTOM_FILE_CAPTION.format(file_name= '' if title is None else title, file_size='' if size is None else size, file_caption='' if f_caption is None else f_caption)
-        except Exception as e:
-            logger.exception(e)
-            f_caption=f_caption
-    if f_caption is None:
-        f_caption = f"{files.file_name}"
-    await client.send_cached_media(
-        chat_id=message.from_user.id,
-        file_id=file_id,
-        caption=f_caption,
-        parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION else enums.ParseMode.DEFAULT,
-        protect_content=True if pre == 'filep' else False,
-        reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ],
-                                             # [InlineKeyboardButton("🔞 Adult Content Channel",
-                                             #                       url="https://t.me/eseoaOF")],
-                                             [InlineKeyboardButton("🍺 Buy Me A Beer",
-                                                                   url="https://buymeacoffee.com/matthewmurdock001")],
-                                             ] ),
-    )
                     
 
 @Client.on_message(filters.command('channel') & filters.user(info.ADMINS))

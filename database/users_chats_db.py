@@ -1,5 +1,6 @@
 import motor.motor_asyncio
 import info
+from datetime import datetime, date
 
 class Database:
     
@@ -17,6 +18,10 @@ class Database:
                 'is_banned': False,
                 'ban_reason': "",
             },
+            is_premium=False,
+            premium_activation_date=None,
+            daily_retrieval_count=0,
+            last_retrieval_date=None,
         )
 
     def new_group(self, id, title):
@@ -135,6 +140,45 @@ class Database:
         # Returns the database size (dataSize in bytes)
         stats = await self.db.command("dbstats")
         return stats.get('dataSize', 0)
+
+    async def update_premium_status(self, user_id, is_premium):
+        activation_date = datetime.now() if is_premium else None
+        await self.col.update_one(
+            {'id': user_id},
+            {'$set': {'is_premium': is_premium, 'premium_activation_date': activation_date}}
+        )
+
+    async def increment_retrieval_count(self, user_id):
+        user = await self.col.find_one({'id': user_id})
+        if not user:
+            return
+
+        today = date.today()
+        last_retrieval_date = user.get('last_retrieval_date')
+        daily_retrieval_count = user.get('daily_retrieval_count', 0)
+
+        if last_retrieval_date != today:
+            daily_retrieval_count = 0
+            last_retrieval_date = today
+        
+        daily_retrieval_count += 1
+        await self.col.update_one(
+            {'id': user_id},
+            {'$set': {'daily_retrieval_count': daily_retrieval_count, 'last_retrieval_date': last_retrieval_date}}
+        )
+        return daily_retrieval_count
+
+    async def get_user_data(self, user_id):
+        user = await self.col.find_one({'id': user_id})
+        if not user:
+            return None
+        
+        return {
+            'is_premium': user.get('is_premium', False),
+            'premium_activation_date': user.get('premium_activation_date'),
+            'daily_retrieval_count': user.get('daily_retrieval_count', 0),
+            'last_retrieval_date': user.get('last_retrieval_date')
+        }
 
 
 db = Database(info.DATABASE_URI, info.DATABASE_NAME)
