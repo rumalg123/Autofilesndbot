@@ -506,6 +506,11 @@ async def start(client, message):
         if not can_access:
             await message.reply_text(reason)
             return
+    if is_direct_file_request:
+        can_access, reason = await check_user_access(client, message, user_id,increment=True)
+        if not can_access:
+            await message.reply_text(reason)
+            return
 
     if info.AUTH_CHANNEL and not await is_subscribed(client, message):
         try:
