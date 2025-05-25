@@ -10,17 +10,19 @@ from pyrogram import Client, filters, enums
 from pyrogram.errors import ChatAdminRequired, FloodWait
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram.errors.exceptions.bad_request_400 import ChannelInvalid, UsernameInvalid, UsernameNotModified
+from pyrogram.types import Message # Added Message
 from database.ia_filterdb import Media, get_file_details, unpack_new_file_id, get_bad_files
 from database.users_chats_db import db
 #from info import CHANNELS, ADMINS, AUTH_CHANNEL, LOG_CHANNEL, PICS, BATCH_FILE_CAPTION, CUSTOM_FILE_CAPTION, SUPPORT_CHAT, PROTECT_CONTENT, REQST_CHANNEL, SUPPORT_CHAT_ID, MAX_B_TN, FILE_STORE_CHANNEL, PUBLIC_FILE_STORE, KEEP_ORIGINAL_CAPTION, initialize_configuration
 import info
+from info import PREMIUM_DURATION_DAYS, NON_PREMIUM_DAILY_LIMIT # Added
 from utils import get_settings, get_size, is_subscribed, save_group_settings, temp
 from database.connections_mdb import active_connection
 import re
 import json
 import base64
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date # Added date
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 RESTART_FILE = "restart_msg.txt"
@@ -155,6 +157,160 @@ async def remove_premium_command(client, message):
         await client.send_message(user_id_to_remove, "Your premium status has been removed.")
     except Exception:
         await message.reply_text(f"Could not notify user {user_mention} directly.")
+
+
+@Client.on_message(filters.command("plans") & filters.private)
+async def plans_command(client: Client, message: Message):
+    user_id = message.from_user.id
+    user_data = await db.get_user_data(user_id) # Returns None if user not found
+
+    plan_message_lines = [
+        "✨ **Our Premium Plan** ✨\n",
+        "🔹 **1-Month Plan:** $1 (30 days of unlimited access)\n",
+        "💳 **Payment Link:** https://buymeacoffee.com/matthewmurdock001\n",
+        "❗ **Important Payment Instructions:**",
+        "1. After payment, send a confirmation message to @gunaya001contactbot.",
+        "2. When paying on Buy Me a Coffee, please include your Telegram Username (e.g., @yourusername) AND your Telegram User ID in the message/note section.",
+        "3. Send your Telegram Username and User ID also to @gunaya001contactbot after payment.\n",
+        "---",
+        "👤 **Your Current Status:**"
+    ]
+
+    if user_data and user_data.get('is_premium'):
+        plan_message_lines.append("✅ You are currently on the **Premium Plan**.")
+        activation_date_val = user_data.get('premium_activation_date')
+        if activation_date_val:
+            activation_date = None
+            # Robust date parsing
+            if isinstance(activation_date_val, datetime): # Already a datetime object (preferred)
+                activation_date = activation_date_val
+            elif isinstance(activation_date_val, date) and not isinstance(activation_date_val, datetime): # if it's just a date object
+                 activation_date = datetime.combine(activation_date_val, datetime.min.time())
+            elif isinstance(activation_date_val, str):
+                try:
+                    activation_date = datetime.fromisoformat(activation_date_val)
+                except ValueError:
+                    try: # Attempt to parse older timestamp format if isoformat fails
+                        activation_date = datetime.fromtimestamp(float(activation_date_val))
+                    except ValueError:
+                        logger.error(f"Invalid premium_activation_date string format for user {user_id}: {activation_date_val}")
+            elif isinstance(activation_date_val, (int, float)): # Timestamp
+                try:
+                    activation_date = datetime.fromtimestamp(float(activation_date_val))
+                except ValueError:
+                    logger.error(f"Invalid premium_activation_date timestamp format for user {user_id}: {activation_date_val}")
+            
+            if activation_date:
+                expiry_date = activation_date + timedelta(days=PREMIUM_DURATION_DAYS)
+                if datetime.now() > expiry_date:
+                    plan_message_lines.append("⚠️ Your premium subscription has expired.")
+                    # Consider calling db.update_premium_status(user_id, False) if not handled elsewhere reliably
+                else:
+                    plan_message_lines.append(f"🗓️ Your premium expires on: {expiry_date.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            else:
+                plan_message_lines.append("Could not determine your premium activation date. Please contact support.")
+        else:
+            plan_message_lines.append("Premium status active, but activation date is missing. Please contact support.")
+    else:
+        plan_message_lines.append("🆓 You are currently on the **Free Plan**.")
+        # Optional: Show current usage for free tier
+        # daily_limit = NON_PREMIUM_DAILY_LIMIT
+        # current_usage = 0
+        # if user_data: # User might be new and not in db yet, or db.get_user_data might return None
+        #    current_usage = user_data.get('daily_retrieval_count', 0)
+        #    # Ensure last_retrieval_date is today for the count to be relevant
+        #    last_retrieval_date_val = user_data.get('last_retrieval_date')
+        #    retrieval_date_obj = None
+        #    if isinstance(last_retrieval_date_val, datetime):
+        #        retrieval_date_obj = last_retrieval_date_val.date()
+        #    elif isinstance(last_retrieval_date_val, date):
+        #        retrieval_date_obj = last_retrieval_date_val
+        #    if retrieval_date_obj != date.today():
+        #        current_usage = 0 # Reset if not today
+        # plan_message_lines.append(f"File retrievals today: {current_usage}/{daily_limit}")
+
+
+    await message.reply_text("\n".join(plan_message_lines), disable_web_page_preview=True)
+
+
+@Client.on_message(filters.command("premiumusers") & filters.user(info.ADMINS))
+async def list_premium_users_command(client: Client, message: Message):
+    await message.reply_chat_action(enums.ChatAction.TYPING)
+    all_users_cursor = await db.get_all_users()
+    premium_users_details = []
+    
+    # Get current time once for expiry checks
+    now = datetime.now()
+
+    async for user_doc in all_users_cursor: # Iterate using async for
+        if user_doc.get('is_premium'):
+            user_id = user_doc.get('id') # In the DB, it's 'id', not '_id' for user documents
+            name = "N/A"
+            username = "N/A"
+            
+            try:
+                # Ensure user_id is an int for get_users
+                user_info_obj = await client.get_users(int(user_id)) 
+                if user_info_obj:
+                    name = user_info_obj.first_name or "N/A"
+                    username = f"@{user_info_obj.username}" if user_info_obj.username else "N/A"
+            except Exception as e:
+                logger.warning(f"Could not fetch info for user ID {user_id}: {e}")
+
+            expiry_text = "Expiry: Unknown"
+            activation_date_val = user_doc.get('premium_activation_date')
+            
+            if activation_date_val:
+                activation_date = None
+                if isinstance(activation_date_val, datetime):
+                    activation_date = activation_date_val
+                elif isinstance(activation_date_val, date) and not isinstance(activation_date_val, datetime):
+                    activation_date = datetime.combine(activation_date_val, datetime.min.time())
+                elif isinstance(activation_date_val, str):
+                    try:
+                        activation_date = datetime.fromisoformat(activation_date_val)
+                    except ValueError:
+                        try:
+                            activation_date = datetime.fromtimestamp(float(activation_date_val))
+                        except ValueError:
+                            logger.error(f"Invalid premium_activation_date string for user {user_id} in premiumusers: {activation_date_val}")
+                elif isinstance(activation_date_val, (int, float)):
+                    try:
+                        activation_date = datetime.fromtimestamp(float(activation_date_val))
+                    except ValueError:
+                        logger.error(f"Invalid premium_activation_date timestamp for user {user_id} in premiumusers: {activation_date_val}")
+
+                if activation_date:
+                    expiry_date = activation_date + timedelta(days=PREMIUM_DURATION_DAYS)
+                    status = "Expired" if now > expiry_date else "Active"
+                    expiry_text = f"Expires: {expiry_date.strftime('%Y-%m-%d %H:%M:%S UTC')} ({status})"
+                else:
+                    expiry_text = "Expiry: Invalid activation date"
+            else:
+                expiry_text = "Expiry: No activation date"
+            
+            premium_users_details.append(f"ID: `{user_id}` | Name: {name} | User: {username} | {expiry_text}")
+
+    if not premium_users_details:
+        reply_message_text = "No premium users found."
+    else:
+        reply_message_text = "👑 **Premium Users List** 👑\n\n" + "\n".join(premium_users_details)
+
+    if len(reply_message_text) > 4096:
+        try:
+            with open("premium_users.txt", "w", encoding="utf-8") as f:
+                # Use the raw list for the file content for better readability
+                file_content = "Premium Users List\n\n" + "\n".join(premium_users_details)
+                f.write(file_content)
+            await message.reply_document("premium_users.txt", caption="List of all premium users.")
+            if os.path.exists("premium_users.txt"): # Ensure file exists before removing
+                os.remove("premium_users.txt")
+        except Exception as e:
+            logger.error(f"Error creating or sending premium users file: {e}")
+            await message.reply_text("Error generating premium users list file.")
+    else:
+        await message.reply_text(reply_message_text, disable_web_page_preview=True)
+
 
 @Client.on_message(filters.command("start") & filters.incoming)
 async def start(client, message):
