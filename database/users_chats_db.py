@@ -1,6 +1,6 @@
 import motor.motor_asyncio
 import info
-from datetime import datetime, date,time
+from datetime import datetime, date, time 
 
 class Database:
     
@@ -19,9 +19,9 @@ class Database:
                 'ban_reason': "",
             },
             is_premium=False,
-            premium_activation_date=None,
+            premium_activation_date=None, 
             daily_retrieval_count=0,
-            last_retrieval_date=None,
+            last_retrieval_date=None, 
         )
 
     def new_group(self, id, title):
@@ -71,14 +71,12 @@ class Database:
         return user.get('ban_status', default)
 
     async def get_all_users(self):
-        # Returns a list of all user documents
         return await self.col.find({}).to_list(length=None)
     
     async def delete_user(self, user_id):
         await self.col.delete_many({'id': int(user_id)})
 
     async def get_banned(self):
-        # Returns lists of banned user IDs and disabled chat IDs
         users_cursor = self.col.find({'ban_status.is_banned': True})
         chats_cursor = self.grp.find({'chat_status.is_disabled': True})
         b_users = [user['id'] async for user in users_cursor]
@@ -104,7 +102,7 @@ class Database:
         await self.grp.update_one({'id': int(id)}, {'$set': {'settings': settings}})
         
     async def get_settings(self, id):
-        default = {
+        default_settings = {
             'button': info.SINGLE_BUTTON,
             'botpm': info.P_TTI_SHOW_OFF,
             'file_secure': info.PROTECT_CONTENT,
@@ -118,8 +116,12 @@ class Database:
         }
         chat_doc = await self.grp.find_one({'id': int(id)})
         if chat_doc:
-            return chat_doc.get('settings', default)
-        return default
+            stored_settings = chat_doc.get('settings')
+            if stored_settings:
+                merged_settings = default_settings.copy()
+                merged_settings.update(stored_settings)
+                return merged_settings
+        return default_settings.copy() 
     
     async def disable_chat(self, chat, reason="No Reason"):
         chat_status = {
@@ -133,16 +135,14 @@ class Database:
         return count
     
     async def get_all_chats(self):
-        # Returns a list of all group documents
         return await self.grp.find({}).to_list(length=None)
     
     async def get_db_size(self):
-        # Returns the database size (dataSize in bytes)
         stats = await self.db.command("dbstats")
         return stats.get('dataSize', 0)
 
     async def update_premium_status(self, user_id, is_premium):
-        activation_date = datetime.now() if is_premium else None
+        activation_date = datetime.utcnow() if is_premium else None 
         await self.col.update_one(
             {'id': user_id},
             {'$set': {'is_premium': is_premium, 'premium_activation_date': activation_date}}
@@ -151,33 +151,34 @@ class Database:
     async def increment_retrieval_count(self, user_id):
         user = await self.col.find_one({'id': user_id})
         if not user:
-            # This case should ideally not be hit if add_user is called correctly before this.
-            # Returning a very high number will cause the limit check to fail.
-            return float('inf') 
+            # If user does not exist, add them with a default name and re-fetch.
+            await self.add_user(user_id, f"User {user_id}")
+            user = await self.col.find_one({'id': user_id})
+            if not user: # Should ideally not happen after add_user
+                return float('inf') # Error case or prevent further processing
 
-        today = date.today()
-        today_dt = datetime.combine(today, time())  # yields datetime(..., 00:00:00)
-        last_retrieval_val = user.get('last_retrieval_date') # This could be None, date, or datetime
+        today_utc = datetime.utcnow().date() 
+        today_dt_utc = datetime.combine(today_utc, datetime.min.time()) 
+
+        last_retrieval_val = user.get('last_retrieval_date') 
         daily_retrieval_count = user.get('daily_retrieval_count', 0)
 
         retrieval_date_obj = None
-        if isinstance(last_retrieval_val, datetime):
+        if isinstance(last_retrieval_val, datetime): 
             retrieval_date_obj = last_retrieval_val.date()
-        elif isinstance(last_retrieval_val, date):
+        elif isinstance(last_retrieval_val, date): 
             retrieval_date_obj = last_retrieval_val
-        # If last_retrieval_val is None, retrieval_date_obj remains None; (None != today) is True.
-
-        if retrieval_date_obj != today:
+        
+        if retrieval_date_obj != today_utc: 
             daily_retrieval_count = 0
         
         daily_retrieval_count += 1
         
-        # Store today's date (as a date object, Motor/MongoDB will handle BSON conversion)
         await self.col.update_one(
             {'id': user_id},
             {'$set': {
                 'daily_retrieval_count': daily_retrieval_count, 
-                'last_retrieval_date': today_dt  # Storing datetime.date object
+                'last_retrieval_date': today_dt_utc  
                 }
             }
         )
@@ -186,8 +187,18 @@ class Database:
     async def get_user_data(self, user_id):
         user = await self.col.find_one({'id': user_id})
         if not user:
-            return None
-        
+            # If user doesn't exist, add them with a default name and then return their data.
+            # This ensures that any function calling get_user_data receives a valid structure.
+            await self.add_user(user_id, f"User {user_id}")
+            user = await self.col.find_one({'id': user_id})
+            if not user: # Should ideally not happen if add_user was successful
+                 return { # Return a default structure in case of very rare failure
+                    'is_premium': False,
+                    'premium_activation_date': None,
+                    'daily_retrieval_count': 0,
+                    'last_retrieval_date': None
+                }
+
         return {
             'is_premium': user.get('is_premium', False),
             'premium_activation_date': user.get('premium_activation_date'),

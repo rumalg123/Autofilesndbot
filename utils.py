@@ -6,6 +6,7 @@ from typing import List
 from typing import Union
 
 import requests
+import aiohttp # Added import
 from bs4 import BeautifulSoup
 from imdb import Cinemagoer
 from pyrogram import enums
@@ -168,16 +169,18 @@ async def broadcast_messages_group(chat_id, message):
     except Exception as e:
         return False, "Error"
 
-async def search_gagala(text):
+async def search_gagala(text): # Changed to async def
     usr_agent = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
         'Chrome/61.0.3163.100 Safari/537.36'
         }
     text = text.replace(" ", '+')
     url = f'https://www.google.com/search?q={text}'
-    response = requests.get(url, headers=usr_agent)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, 'html.parser')
+    async with aiohttp.ClientSession() as session: # Use aiohttp.ClientSession
+        async with session.get(url, headers=usr_agent) as response: # Use async with session.get
+            response.raise_for_status() # Check for HTTP errors
+            html_content = await response.text() # await response.text()
+    soup = BeautifulSoup(html_content, 'html.parser') # html_content instead of response.text
     titles = soup.find_all( 'h3' )
     return [title.getText() for title in titles]
 
@@ -474,3 +477,5 @@ async def send_all(bot, userid, files, ident):
             reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⚔️ Main Channel ⚔️', url="https://t.me/kdramaworld_ongoing") ] ] ))
 
 
+
+[end of utils.py]
