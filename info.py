@@ -95,7 +95,7 @@ POWERED_BY = environ.get("POWERED_BY", "@kdramaworld_ongoing")
 SUPPORT_GROUP = environ.get("SUPPORT_GROUP", "https://t.me/kdramasmirrorchat")
 SUPPORT_GROUP_USERNAME = environ.get("SUPPORT_GROUP_USERNAME", "@kdramasmirrorchat")
 MAIN_CHANNEL = environ.get("MAIN_CHANNEL", "https://t.me/kdramaworld_ongoing")
-START_TEXT = environ.get("START_TEXT","HELLO!!")
+START_TEXT = environ.get("START_TEXT", f"HELLO!! This bot offers a premium plan valid for 30 days with unlimited file retrievals. Free users can retrieve up to {NON_PREMIUM_DAILY_LIMIT} files per day. Check out /plans for more details.")
 
 # A log string (for informational purposes)
 LOG_STR = "Current Cusomized Configurations are:-\n"

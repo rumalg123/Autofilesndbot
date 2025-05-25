@@ -151,20 +151,34 @@ class Database:
     async def increment_retrieval_count(self, user_id):
         user = await self.col.find_one({'id': user_id})
         if not user:
-            return
+            # This case should ideally not be hit if add_user is called correctly before this.
+            # Returning a very high number will cause the limit check to fail.
+            return float('inf') 
 
         today = date.today()
-        last_retrieval_date = user.get('last_retrieval_date')
+        last_retrieval_val = user.get('last_retrieval_date') # This could be None, date, or datetime
         daily_retrieval_count = user.get('daily_retrieval_count', 0)
 
-        if last_retrieval_date != today:
+        retrieval_date_obj = None
+        if isinstance(last_retrieval_val, datetime):
+            retrieval_date_obj = last_retrieval_val.date()
+        elif isinstance(last_retrieval_val, date):
+            retrieval_date_obj = last_retrieval_val
+        # If last_retrieval_val is None, retrieval_date_obj remains None; (None != today) is True.
+
+        if retrieval_date_obj != today:
             daily_retrieval_count = 0
-            last_retrieval_date = today
         
         daily_retrieval_count += 1
+        
+        # Store today's date (as a date object, Motor/MongoDB will handle BSON conversion)
         await self.col.update_one(
             {'id': user_id},
-            {'$set': {'daily_retrieval_count': daily_retrieval_count, 'last_retrieval_date': last_retrieval_date}}
+            {'$set': {
+                'daily_retrieval_count': daily_retrieval_count, 
+                'last_retrieval_date': today  # Storing datetime.date object
+                }
+            }
         )
         return daily_retrieval_count
 
