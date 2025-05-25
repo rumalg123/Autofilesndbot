@@ -44,11 +44,10 @@ async def check_user_access(client, message, user_id, *, increment: bool = False
     #count = user_data.get('daily_retrieval_count', 0)
 
     if not user_data:
-        # New user handling
-        if message and message.from_user:  # Ensure message and from_user are available
-            await db.add_user(user_id, message.from_user.first_name)
-        else:  # Fallback if message or from_user is not available (e.g. inline query context)
-            await db.add_user(user_id, f"User {user_id}")  # Or handle error more explicitly
+        name = message.from_user.first_name if message and message.from_user else f"User {user_id}"
+        await db.add_user(user_id, name)
+        user_data = await db.get_user_data(user_id)  # ← re-load here!
+
     # Check for premium status
     if user_data.get('is_premium'):
         activation_date_val = user_data.get('premium_activation_date')
