@@ -482,7 +482,7 @@ async def start(client, message):
             photo=random.choice(info.PICS),
             caption=script.START_TXT.format(message.from_user.mention, temp.U_NAME, temp.B_NAME),
             reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
+            parse_mode=enums.ParseMode.MARKDOWN
         )
         # No file access here, so no check_user_access needed yet
         return  # Exit if it's just a /start command without arguments
