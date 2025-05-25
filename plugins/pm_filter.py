@@ -28,6 +28,7 @@ from database.gfilters_mdb import (
     del_allg
 )
 import logging
+from plugins.commands import check_user_access
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
@@ -539,44 +540,56 @@ async def cb_handler(client: Client, query: CallbackQuery):
                                                        file_caption='' if f_caption is None else f_caption)
             except Exception as e:
                 logger.exception(e)
-            f_caption = f_caption
+            # f_caption = f_caption # This line was redundant, f_caption is already itself
         if f_caption is None:
             f_caption = f"{files.file_name}"
 
+        # Logic for handling who can click and where the file is sent
+        if clicked != typed:
+            return await query.answer(f"𝖧𝖾𝗒 {query.from_user.first_name}, 𝖳𝗁𝗂𝗌 𝗂𝗌 𝗇𝗈𝗍 𝗒𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 !", show_alert=True)
+
         try:
             if info.AUTH_CHANNEL and not await is_subscribed(client, query):
-                if clicked == typed:
-                    await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
-                    return
-                else:
-                    await query.answer(f"𝖧𝖾𝗒 {query.from_user.first_name}, 𝖳𝗁𝗂𝗌 𝗂𝗌 𝗇𝗈𝗍 𝗒𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 !", show_alert=True)
+                await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
+                return
             elif settings['botpm']:
-                if clicked == typed:
-                    await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
-                    return
-                else:
-                    await query.answer(f"𝖧𝖾𝗒 {query.from_user.first_name}, 𝖳𝗁𝗂𝗌 𝗂𝗌 𝗇𝗈𝗍 𝗒𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 !", show_alert=True)
+                await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
+                return
             else:
-                if clicked == typed:
-                    await client.send_cached_media(
-                        chat_id=query.from_user.id,
-                        file_id=file_id,
-                        caption=f_caption,
-                        protect_content=True if ident == "filep" else False,
-                        reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url="https://t.me/kdramaworld_ongoing") ] ] ))
-                else:
-                    await query.answer(f"𝖧𝖾𝗒 {query.from_user.first_name}, 𝖳𝗁𝗂𝗌 𝗂𝗌 𝗇𝗈𝗍 𝗒𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 !", show_alert=True)
+                # Direct file sending part
+                user_id = query.from_user.id
+                can_access, reason = await check_user_access(client, query.message, user_id)
+                if not can_access:
+                    await query.answer(reason, show_alert=True)
+                    return
+
+                await client.send_cached_media(
+                    chat_id=query.from_user.id,
+                    file_id=file_id,
+                    caption=f_caption,
+                    protect_content=True if ident == "filep" else False,
+                    reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url="https://t.me/kdramaworld_ongoing") ] ] ))
                 await query.answer('𝖢𝗁𝖾𝖼𝗄 𝖯𝖬, 𝖨 𝗁𝖺𝗏𝖾 𝗌𝖾𝗇𝗍 𝖿𝗂𝗅𝖾𝗌 𝗂𝗇 𝖯𝖬', show_alert=True)
         except UserIsBlocked:
             await query.answer('𝖴𝗇𝖻𝗅𝗈𝖼𝗄 𝗍𝗁𝖾 𝖻𝗈𝗍 𝗆𝖺𝗇𝗁 !', show_alert=True)
-        except PeerIdInvalid:
+        except PeerIdInvalid: # Should not happen if botpm is false, but good fallback
             await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
-        except Exception as e:
-            await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
+        except Exception as e: # General error
+            logger.error(f"Error in cb_handler 'file': {e}", exc_info=True)
+            await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}") # Fallback to PM
+
     elif query.data.startswith("checksub"):
-        if info.AUTH_CHANNEL and not await is_subscribed(client, query):
+        user_id = query.from_user.id # Moved user_id retrieval up
+        if info.AUTH_CHANNEL and not await is_subscribed(client, query): # This check should be before access check
             await query.answer("𝖨 𝖫𝗂𝗄𝖾 𝖸𝗈𝗎𝗋 𝖲𝗆𝖺𝗋𝗍𝗇𝖾𝗌𝗌, 𝖡𝗎𝗍 𝖣𝗈𝗇'𝗍 𝖡𝖾 𝖮𝗏𝖾𝗋𝗌𝗆𝖺𝗋𝗍 😒 \n𝖩𝗈𝗂𝗇 𝖴𝗉𝖽𝖺𝗍𝖾 𝖢𝗁𝖺𝗇𝗇𝖾𝗅 𝖿𝗂𝗋𝗌𝗍 ;)", show_alert=True)
             return
+
+        # Now, check user access as they are past the subscription gate (if any)
+        can_access, reason = await check_user_access(client, query.message, user_id)
+        if not can_access:
+            await query.answer(reason, show_alert=True)
+            return
+            
         ident, file_id = query.data.split("#")
         files_ = await get_file_details(file_id)
         if not files_:
@@ -584,29 +597,37 @@ async def cb_handler(client: Client, query: CallbackQuery):
         files = files_[0]
         title = files.file_name
         size = get_size(files.file_size)
-        f_caption = files.caption
+        f_caption = files.caption # Intentionally re-assigning, not using previous f_caption due to scope
         if info.KEEP_ORIGINAL_CAPTION:
             try:
                 f_caption = files.caption
             except:
                 f_caption = f"{title}"
-        if info.CUSTOM_FILE_CAPTION:
+        elif info.CUSTOM_FILE_CAPTION: # Ensure this is 'elif' not 'if' to avoid double processing
             try:
                 f_caption = info.CUSTOM_FILE_CAPTION.format(file_name='' if title is None else title,
                                                        file_size='' if size is None else size,
                                                        file_caption='' if f_caption is None else f_caption)
             except Exception as e:
                 logger.exception(e)
-                f_caption = f_caption
-        if f_caption is None:
+                # f_caption remains as it was before this block if CUSTOM_FILE_CAPTION fails
+        if f_caption is None: # Final fallback
             f_caption = f"{title}"
-        await query.answer()
-        await client.send_cached_media(
-            chat_id=query.from_user.id,
-            file_id=file_id,
-            caption=f_caption,
-            protect_content=True if ident == 'checksubp' else False,
-            reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ))
+
+        await query.answer() # Acknowledge callback first
+        try:
+            await client.send_cached_media(
+                chat_id=query.from_user.id, # Send to the user who clicked
+                file_id=file_id,
+                caption=f_caption,
+                protect_content=True if ident == 'checksubp' else False, # checksubp for protected content
+                reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ))
+        except UserIsBlocked:
+            await query.answer('𝖴𝗇𝖻𝗅𝗈𝖼𝗄 𝗍𝗁𝖾 𝖻𝗈𝗍 𝗆𝖺𝗇𝗁 !', show_alert=True)
+        except Exception as e:
+            logger.error(f"Error in cb_handler 'checksub': {e}", exc_info=True)
+            await query.answer("An error occurred while sending the file.", show_alert=True)
+
     elif query.data == "pages":
         await query.answer()
 
@@ -1315,6 +1336,12 @@ async def auto_filter(client, msg, spoll=False):
         message = msg.message.reply_to_message  # msg will be callback query
         search, files, offset, total_results = spoll
         settings = await get_settings(msg.message.chat.id)
+
+    user_id = message.from_user.id
+    can_access, reason = await check_user_access(client, message, user_id)
+    if not can_access:
+        await message.reply_text(reason)
+        return
         
     key = f"{message.chat.id}-{message.id}"
     temp.FILES_IDS[key] = files
@@ -1611,9 +1638,19 @@ async def manual_filters(client, message, text=False):
                 reply_text = reply_text.replace("\\n", "\n").replace("\\t", "\t")
 
             if btn is not None:
+                # User access check before sending file/message for this filter
+                user_id = message.from_user.id
+                if fileid != "None": # Only check if a file is involved
+                    can_access, reason = await check_user_access(client, message, user_id)
+                    if not can_access:
+                        await message.reply_text(reason)
+                        break # Stop processing this matched keyword for this user
+
                 try:
                     if fileid == "None":
                         if btn == "[]":
+                            # This is a text-only response from filter.
+                            # No file access check needed here based on current subtask scope.
                             piroxrk = await client.send_message(
                                 group_id, 
                                 reply_text, 
@@ -1654,6 +1691,8 @@ async def manual_filters(client, message, text=False):
 
                         else:
                             button = eval(btn)
+                            # This is a text-only response with buttons from filter.
+                            # No file access check needed here based on current subtask scope.
                             piroxrk = await client.send_message(
                                 group_id,
                                 reply_text,
@@ -1694,6 +1733,7 @@ async def manual_filters(client, message, text=False):
                                     await auto_filter(client, message)
 
                     elif btn == "[]":
+                        # Access check for fileid already performed above
                         piroxrk = await client.send_cached_media(
                             group_id,
                             fileid,
@@ -1734,6 +1774,7 @@ async def manual_filters(client, message, text=False):
 
                     else:
                         button = eval(btn)
+                        # Access check for fileid already performed above
                         piroxrk = await message.reply_cached_media(
                             fileid,
                             caption=reply_text or "",
@@ -1792,9 +1833,19 @@ async def global_filters(client, message, text=False):
                 reply_text = reply_text.replace("\\n", "\n").replace("\\t", "\t")
 
             if btn is not None:
+                # User access check before sending file/message for this filter
+                user_id = message.from_user.id
+                if fileid != "None": # Only check if a file is involved
+                    can_access, reason = await check_user_access(client, message, user_id)
+                    if not can_access:
+                        await message.reply_text(reason)
+                        break # Stop processing this matched keyword for this user
+
                 try:
                     if fileid == "None":
                         if btn == "[]":
+                            # This is a text-only response from filter.
+                            # No file access check needed here.
                             piroxrk = await client.send_message(
                                 group_id, 
                                 reply_text, 
@@ -1847,6 +1898,8 @@ async def global_filters(client, message, text=False):
                             
                         else:
                             button = eval(btn)
+                            # This is a text-only response with buttons from filter.
+                            # No file access check needed here.
                             piroxrk = await client.send_message(
                                 group_id,
                                 reply_text,
@@ -1899,6 +1952,7 @@ async def global_filters(client, message, text=False):
                                         await piroxrk.delete()
 
                     elif btn == "[]":
+                        # Access check for fileid already performed above
                         piroxrk = await client.send_cached_media(
                             group_id,
                             fileid,
@@ -1951,6 +2005,7 @@ async def global_filters(client, message, text=False):
 
                     else:
                         button = eval(btn)
+                        # Access check for fileid already performed above
                         piroxrk = await message.reply_cached_media(
                             fileid,
                             caption=reply_text or "",

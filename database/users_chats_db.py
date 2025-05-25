@@ -1,5 +1,6 @@
 import motor.motor_asyncio
 import info
+from datetime import datetime, date
 
 class Database:
     
@@ -17,6 +18,10 @@ class Database:
                 'is_banned': False,
                 'ban_reason': "",
             },
+            is_premium=False,
+            premium_activation_date=None,
+            daily_retrieval_count=0,
+            last_retrieval_date=None,
         )
 
     def new_group(self, id, title):
@@ -135,6 +140,59 @@ class Database:
         # Returns the database size (dataSize in bytes)
         stats = await self.db.command("dbstats")
         return stats.get('dataSize', 0)
+
+    async def update_premium_status(self, user_id, is_premium):
+        activation_date = datetime.now() if is_premium else None
+        await self.col.update_one(
+            {'id': user_id},
+            {'$set': {'is_premium': is_premium, 'premium_activation_date': activation_date}}
+        )
+
+    async def increment_retrieval_count(self, user_id):
+        user = await self.col.find_one({'id': user_id})
+        if not user:
+            # This case should ideally not be hit if add_user is called correctly before this.
+            # Returning a very high number will cause the limit check to fail.
+            return float('inf') 
+
+        today = date.today()
+        last_retrieval_val = user.get('last_retrieval_date') # This could be None, date, or datetime
+        daily_retrieval_count = user.get('daily_retrieval_count', 0)
+
+        retrieval_date_obj = None
+        if isinstance(last_retrieval_val, datetime):
+            retrieval_date_obj = last_retrieval_val.date()
+        elif isinstance(last_retrieval_val, date):
+            retrieval_date_obj = last_retrieval_val
+        # If last_retrieval_val is None, retrieval_date_obj remains None; (None != today) is True.
+
+        if retrieval_date_obj != today:
+            daily_retrieval_count = 0
+        
+        daily_retrieval_count += 1
+        
+        # Store today's date (as a date object, Motor/MongoDB will handle BSON conversion)
+        await self.col.update_one(
+            {'id': user_id},
+            {'$set': {
+                'daily_retrieval_count': daily_retrieval_count, 
+                'last_retrieval_date': today  # Storing datetime.date object
+                }
+            }
+        )
+        return daily_retrieval_count
+
+    async def get_user_data(self, user_id):
+        user = await self.col.find_one({'id': user_id})
+        if not user:
+            return None
+        
+        return {
+            'is_premium': user.get('is_premium', False),
+            'premium_activation_date': user.get('premium_activation_date'),
+            'daily_retrieval_count': user.get('daily_retrieval_count', 0),
+            'last_retrieval_date': user.get('last_retrieval_date')
+        }
 
 
 db = Database(info.DATABASE_URI, info.DATABASE_NAME)
