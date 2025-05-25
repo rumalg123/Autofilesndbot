@@ -1,6 +1,6 @@
 import motor.motor_asyncio
 import info
-from datetime import datetime, date
+from datetime import datetime, date,time
 
 class Database:
     
@@ -156,6 +156,7 @@ class Database:
             return float('inf') 
 
         today = date.today()
+        today_dt = datetime.combine(today, time())  # yields datetime(..., 00:00:00)
         last_retrieval_val = user.get('last_retrieval_date') # This could be None, date, or datetime
         daily_retrieval_count = user.get('daily_retrieval_count', 0)
 
@@ -176,7 +177,7 @@ class Database:
             {'id': user_id},
             {'$set': {
                 'daily_retrieval_count': daily_retrieval_count, 
-                'last_retrieval_date': today  # Storing datetime.date object
+                'last_retrieval_date': today_dt  # Storing datetime.date object
                 }
             }
         )

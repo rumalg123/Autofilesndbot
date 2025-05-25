@@ -558,11 +558,14 @@ async def cb_handler(client: Client, query: CallbackQuery):
             else:
                 # Direct file sending part
                 user_id = query.from_user.id
-                can_access, reason = await check_user_access(client, query.message, user_id)
+                can_access, reason = await check_user_access(client, query.message, user_id,increment=False)
                 if not can_access:
                     await query.answer(reason, show_alert=True)
                     return
-
+                ok, reason = await check_user_access(client, query.message, user_id,increment=True)
+                if not ok:
+                    await query.answer(reason, show_alert=True)
+                    return
                 await client.send_cached_media(
                     chat_id=query.from_user.id,
                     file_id=file_id,
@@ -585,7 +588,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             return
 
         # Now, check user access as they are past the subscription gate (if any)
-        can_access, reason = await check_user_access(client, query.message, user_id)
+        can_access, reason = await check_user_access(client, query.message, user_id,increment=False)
         if not can_access:
             await query.answer(reason, show_alert=True)
             return
@@ -615,6 +618,10 @@ async def cb_handler(client: Client, query: CallbackQuery):
             f_caption = f"{title}"
 
         await query.answer() # Acknowledge callback first
+        ok, reason = await check_user_access(client, query.message, user_id, increment=True)
+        if not ok:
+            await query.answer(reason, show_alert=True)
+            return
         try:
             await client.send_cached_media(
                 chat_id=query.from_user.id, # Send to the user who clicked
@@ -1338,7 +1345,7 @@ async def auto_filter(client, msg, spoll=False):
         settings = await get_settings(msg.message.chat.id)
 
     user_id = message.from_user.id
-    can_access, reason = await check_user_access(client, message, user_id)
+    can_access, reason = await check_user_access(client, message, user_id,increment=False)
     if not can_access:
         await message.reply_text(reason)
         return
@@ -1544,7 +1551,7 @@ async def auto_filter(client, msg, spoll=False):
                 await fuk.delete()
                 await message.delete()
     if spoll:
-        await msg.message.delete()
+        return await msg.message.delete()
 
 async def advantage_spell_chok(client, msg):
     mv_id = msg.id
@@ -1641,10 +1648,17 @@ async def manual_filters(client, message, text=False):
                 # User access check before sending file/message for this filter
                 user_id = message.from_user.id
                 if fileid != "None": # Only check if a file is involved
-                    can_access, reason = await check_user_access(client, message, user_id)
+                    can_access, reason = await check_user_access(client, message, user_id,increment=False)
                     if not can_access:
                         await message.reply_text(reason)
                         break # Stop processing this matched keyword for this user
+                    can_send, reason = await check_user_access(
+                        client, message, user_id,
+                        increment=True
+                    )
+                    if not can_send:
+                        await message.reply_text(reason)
+                        break
 
                 try:
                     if fileid == "None":
@@ -1836,11 +1850,17 @@ async def global_filters(client, message, text=False):
                 # User access check before sending file/message for this filter
                 user_id = message.from_user.id
                 if fileid != "None": # Only check if a file is involved
-                    can_access, reason = await check_user_access(client, message, user_id)
+                    can_access, reason = await check_user_access(client, message, user_id,increment=False)
                     if not can_access:
                         await message.reply_text(reason)
                         break # Stop processing this matched keyword for this user
-
+                    ok, reason = await check_user_access(
+                        client, message, user_id,
+                        increment=True
+                    )
+                    if not ok:
+                        await message.reply_text(reason)
+                        break
                 try:
                     if fileid == "None":
                         if btn == "[]":
