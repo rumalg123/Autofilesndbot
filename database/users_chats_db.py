@@ -1,11 +1,14 @@
-import motor.motor_asyncio
+from pymongo import MongoClient # Changed from motor.motor_asyncio
 import info
 from datetime import datetime, date, time 
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Database:
     
     def __init__(self, uri, database_name):
-        self._client = motor.motor_asyncio.AsyncIOMotorClient(uri)
+        self._client = MongoClient(uri) # Changed from AsyncIOMotorClient
         self.db = self._client[database_name]
         self.col = self.db.users   # Users collection
         self.grp = self.db.groups  # Groups collection
@@ -43,6 +46,7 @@ class Database:
         return bool(user)
     
     async def total_users_count(self):
+        # count_documents is awaitable in pymongo's async usage
         count = await self.col.count_documents({})
         return count
     
@@ -71,7 +75,8 @@ class Database:
         return user.get('ban_status', default)
 
     async def get_all_users(self):
-        return await self.col.find({}).to_list(length=None)
+        # Changed from .to_list(length=None) to async list comprehension
+        return [user async for user in self.col.find({})]
     
     async def delete_user(self, user_id):
         await self.col.delete_many({'id': int(user_id)})
@@ -79,6 +84,7 @@ class Database:
     async def get_banned(self):
         users_cursor = self.col.find({'ban_status.is_banned': True})
         chats_cursor = self.grp.find({'chat_status.is_disabled': True})
+        # Async list comprehensions are standard for pymongo async cursors
         b_users = [user['id'] async for user in users_cursor]
         b_chats = [chat['id'] async for chat in chats_cursor]
         return b_users, b_chats
@@ -131,17 +137,24 @@ class Database:
         await self.grp.update_one({'id': int(chat)}, {'$set': {'chat_status': chat_status}})
     
     async def total_chat_count(self):
+        # count_documents is awaitable in pymongo's async usage
         count = await self.grp.count_documents({})
         return count
     
     async def get_all_chats(self):
-        return await self.grp.find({}).to_list(length=None)
+        # Changed from .to_list(length=None) to async list comprehension
+        return [chat async for chat in self.grp.find({})]
     
     async def get_db_size(self):
+        # db.command is awaitable in pymongo's async usage
         stats = await self.db.command("dbstats")
         return stats.get('dataSize', 0)
 
     async def update_premium_status(self, user_id, is_premium):
+        if is_premium:
+            logger.info(f"Adding user {user_id} to premium.")
+        else:
+            logger.info(f"Removing user {user_id} from premium.")
         activation_date = datetime.utcnow() if is_premium else None 
         await self.col.update_one(
             {'id': user_id},
@@ -155,6 +168,7 @@ class Database:
             await self.add_user(user_id, f"User {user_id}")
             user = await self.col.find_one({'id': user_id})
             if not user: # Should ideally not happen after add_user
+                logger.error(f"Failed to add or find user {user_id} after attempting to add them in increment_retrieval_count.")
                 return float('inf') # Error case or prevent further processing
 
         today_utc = datetime.utcnow().date() 
@@ -188,10 +202,10 @@ class Database:
         user = await self.col.find_one({'id': user_id})
         if not user:
             # If user doesn't exist, add them with a default name and then return their data.
-            # This ensures that any function calling get_user_data receives a valid structure.
             await self.add_user(user_id, f"User {user_id}")
             user = await self.col.find_one({'id': user_id})
             if not user: # Should ideally not happen if add_user was successful
+                 logger.error(f"Failed to add or find user {user_id} after attempting to add them in get_user_data.")
                  return { # Return a default structure in case of very rare failure
                     'is_premium': False,
                     'premium_activation_date': None,

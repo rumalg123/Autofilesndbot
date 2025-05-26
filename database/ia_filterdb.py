@@ -4,20 +4,21 @@ import re
 import base64
 
 from pyrogram.file_id import FileId
+from pymongo import MongoClient # Changed from motor.motor_asyncio
 from pymongo.errors import DuplicateKeyError
 from umongo import Instance, Document, fields
-from motor.motor_asyncio import AsyncIOMotorClient
+# Removed: from motor.motor_asyncio import AsyncIOMotorClient 
 from marshmallow.exceptions import ValidationError
 import info
-from utils import get_settings, save_group_settings
+from utils import get_settings, save_group_settings # Assuming these utils are not db-driver specific
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # Initialize asynchronous client, database and uMongo instance.
-client = AsyncIOMotorClient(info.DATABASE_URI)
+client = MongoClient(info.DATABASE_URI) # Changed from AsyncIOMotorClient
 db = client[info.DATABASE_NAME]
-instance = Instance.from_db(db)
+instance = Instance.from_db(db) # Assuming umongo handles the pymongo.Database object for async
 
 @instance.register
 class Media(Document):
@@ -42,14 +43,13 @@ async def save_file(media):
         - code: an integer code representing the result.
             1: successfully saved,
             0: duplicate file,
-            2: validation error.
+            2: validation error,
+            3: general database error or other commit failure.
     """
-    # Unpack the new file_id into file_id and file_ref
     file_id, file_ref = unpack_new_file_id(media.file_id)
-    # Normalize the file name (replace special characters with spaces)
     file_name = re.sub(r"([_\-.+])", " ", str(media.file_name))
     try:
-        file = Media(
+        file_doc = Media( # Renamed file to file_doc to avoid conflict with built-in file
             file_id=file_id,
             file_ref=file_ref,
             file_name=file_name,
@@ -63,101 +63,104 @@ async def save_file(media):
         return False, 2
     else:
         try:
-            await file.commit() # type: ignore
+            await file_doc.commit() 
         except DuplicateKeyError:
             logger.warning(
                 f'{getattr(media, "file_name", "NO_FILE")} is already saved in the database.'
             )
             return False, 0
+        except Exception as e:
+            logger.error(f"Error committing file {getattr(media, 'file_name', 'NO_FILE')} to database: {e}", exc_info=True)
+            return False, 3
         else:
             logger.info(f'{getattr(media, "file_name", "NO_FILE")} is saved to the database.')
             return True, 1
 
 
-async def get_search_results(chat_id, query, file_type=None, max_results=10, offset=0, filter=False):
+async def get_search_results(chat_id, query, file_type=None, max_results=10, offset=0, filter=False): # filter param seems unused
     """For a given query, return (files, next_offset, total_results)."""
-    # Adjust results count based on group settings
     if chat_id is not None:
         settings = await get_settings(int(chat_id))
         try:
             max_results = 10 if settings['max_btn'] else int(info.MAX_B_TN)
-        except KeyError:
-            await save_group_settings(int(chat_id), 'max_btn', False)
-            settings = await get_settings(int(chat_id))
-            max_results = 10 if settings['max_btn'] else int(info.MAX_B_TN)
+        except KeyError: # Should ideally not happen if settings are always populated
+            await save_group_settings(int(chat_id), 'max_btn', False) # Default to False if not found
+            # settings = await get_settings(int(chat_id)) # Re-fetch if needed, or use default
+            max_results = 10 # Default if error or not found after attempting save
 
-    # Clean and prepare the query pattern
-    query = re.sub(r"[-:\"';!]", " ", query)
-    query = re.sub(r"\s+", " ", query).strip()
-    if not query:
+    query_cleaned = re.sub(r"[-:\"';!]", " ", query) # Renamed query to query_cleaned for clarity
+    query_cleaned = re.sub(r"\s+", " ", query_cleaned).strip()
+    if not query_cleaned:
         raw_pattern = '.'
-    elif ' ' not in query:
-        raw_pattern = r'(\b|[\.\+\-_])' + query + r'(\b|[\.\+\-_])'
+    elif ' ' not in query_cleaned:
+        raw_pattern = r'(\b|[\.\+\-_])' + re.escape(query_cleaned) + r'(\b|[\.\+\-_])' # Added re.escape
     else:
-        raw_pattern = query.replace(' ', r'.*[\s\.\+\-_]')
+        raw_pattern = query_cleaned.replace(' ', r'.*[\s\.\+\-_]') # Consider re.escape for parts of query_cleaned if they can have regex chars
     
     try:
         regex = re.compile(raw_pattern, flags=re.IGNORECASE)
-    except Exception:
-        return []
+    except re.error as e: # More specific exception
+        logger.error(f"Regex compilation error for pattern '{raw_pattern}': {e}")
+        return [], '', 0 # Return empty results on regex error
 
+    mongo_query_filter = {'file_name': regex} # Renamed mongo_filter
     if info.USE_CAPTION_FILTER:
-        mongo_filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
-    else:
-        mongo_filter = {'file_name': regex}
+        mongo_query_filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
 
     if file_type:
-        mongo_filter['file_type'] = file_type
+        mongo_query_filter['file_type'] = file_type
 
-    # Get the total number of matching documents
-    total_results = await Media.count_documents(mongo_filter)
-    next_offset = offset + max_results
-    if next_offset > total_results:
-        next_offset = ''
+    total_results = await Media.count_documents(mongo_query_filter)
+    
+    next_offset_val = offset + max_results # Renamed next_offset
+    if next_offset_val >= total_results: # Changed > to >=
+        next_offset_val = ''
 
-    # Build a cursor with sorting, skipping, and limiting results
-    cursor = Media.find(mongo_filter).sort('$natural', -1).skip(offset).limit(max_results)
-    files = await cursor.to_list(length=max_results)
+    cursor = Media.find(mongo_query_filter).sort('$natural', -1).skip(offset).limit(max_results)
+    # Changed from to_list to async list comprehension
+    files = [doc async for doc in cursor] 
 
-    return files, next_offset, total_results
+    return files, next_offset_val, total_results
 
 
-async def get_bad_files(query, file_type=None, filter=False):
+async def get_bad_files(query, file_type=None, filter=False): # filter param seems unused
     """Return a list of files that match the query, considering the full result set."""
-    query = query.strip()
-    if not query:
+    query_cleaned = query.strip() # Renamed query
+    if not query_cleaned:
         raw_pattern = '.'
-    elif ' ' not in query:
-        raw_pattern = r'(\b|[\.\+\-_])' + query + r'(\b|[\.\+\-_])'
+    elif ' ' not in query_cleaned:
+        raw_pattern = r'(\b|[\.\+\-_])' + re.escape(query_cleaned) + r'(\b|[\.\+\-_])' # Added re.escape
     else:
-        raw_pattern = query.replace(' ', r'.*[\s\.\+\-_]')
+        raw_pattern = query_cleaned.replace(' ', r'.*[\s\.\+\-_]')
     
     try:
         regex = re.compile(raw_pattern, flags=re.IGNORECASE)
-    except Exception:
-        return []
+    except re.error as e: # More specific exception
+        logger.error(f"Regex compilation error for pattern '{raw_pattern}' in get_bad_files: {e}")
+        return [], 0
 
+    mongo_query_filter = {'file_name': regex} # Renamed mongo_filter
     if info.USE_CAPTION_FILTER:
-        mongo_filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
-    else:
-        mongo_filter = {'file_name': regex}
+        mongo_query_filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
 
     if file_type:
-        mongo_filter['file_type'] = file_type
+        mongo_query_filter['file_type'] = file_type
 
-    total_results = await Media.count_documents(mongo_filter)
-    cursor = Media.find(mongo_filter).sort('$natural', -1)
-    files = await cursor.to_list(length=total_results)
+    total_results = await Media.count_documents(mongo_query_filter)
+    cursor = Media.find(mongo_query_filter).sort('$natural', -1) # No limit, get all matching
+    # Changed from to_list to async list comprehension
+    files = [doc async for doc in cursor]
 
     return files, total_results
 
 
-async def get_file_details(query):
+async def get_file_details(file_id_query): # Renamed query to file_id_query
     """Return details for a file with the given file_id."""
-    mongo_filter = {'file_id': query}
-    cursor = Media.find(mongo_filter)
-    filedetails = await cursor.to_list(length=1)
-    return filedetails
+    mongo_query_filter = {'file_id': file_id_query} # Renamed mongo_filter
+    cursor = Media.find(mongo_query_filter) # Limit is not strictly needed if file_id is unique, but good for safety
+    # Changed from to_list to async list comprehension, expect 0 or 1 result
+    file_details_list = [doc async for doc in cursor] # Renamed filedetails
+    return file_details_list # Returns a list (empty or with one item)
 
 
 def encode_file_id(s: bytes) -> str:

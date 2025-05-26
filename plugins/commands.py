@@ -109,10 +109,10 @@ async def check_user_access(client, message, user_id, *, increment: bool = False
         raw_count = 0
 
     if raw_count >= info.NON_PREMIUM_DAILY_LIMIT:
-        limit_msg = f"You have reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access."
+        limit_msg = f"You have reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Send /plan to see available plans and upgrade to premium."
         # The condition `user_data.get('is_premium') and 'expiry_date' in locals()` might be true if premium just expired in this call
         if 'expiry_date' in locals() and now_utc > expiry_date: # Check if premium expired in this same function call
-            limit_msg = f"Your premium has expired and you have now reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access."
+            limit_msg = f"Your premium has expired and you have now reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Send /plan to see available plans and upgrade to premium."
         return False, limit_msg
     
     if increment:
@@ -1303,5 +1303,3 @@ async def update_restart_status(client):
             os.remove(RESTART_FILE)
         except OSError as e:
             logger.error(f"Could not remove restart file: {e}")
-
-[end of plugins/commands.py]

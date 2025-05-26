@@ -388,9 +388,19 @@ async def auto_filter(client, msg, spoll=False):
             if not files:
                 if settings['spell_check']: 
                     return await advantage_spell_chok(client, msg)
-                else:
-                    if info.NO_RESULTS_MSG:
-                        await client.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, search_query_text)))
+                else: # Spell check is off
+                    if message.chat.type == enums.ChatType.PRIVATE: # Check if it's a PM
+                        await client.send_message(
+                            chat_id=message.chat.id,
+                            text="No results found. Try another keyword or request from the support group. You can find the support group link in /help or /start."
+                        )
+                    # For group chats, no message is sent directly to the chat if spell_check is off and no files are found.
+                    # Logging to LOG_CHANNEL happens if info.NO_RESULTS_MSG is True, which is a separate condition.
+                    elif info.NO_RESULTS_MSG and message.chat.type != enums.ChatType.PRIVATE: 
+                        await client.send_message(
+                            chat_id=info.LOG_CHANNEL, 
+                            text=(script.NORSLTS.format(reqstr.id, reqstr.mention, search_query_text))
+                        )
                     return
         else: 
             return
@@ -513,7 +523,7 @@ async def advantage_spell_chok(client, msg):
             await client.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
         k = await msg.reply_photo(
             photo=info.SPELL_IMG,
-            caption=script.I_CUDNT.format(mv_rqst),
+            caption="No results found. Try another keyword or request from the support group. You can find the support group link in /help or /start.",
             reply_markup=InlineKeyboardMarkup(button)
         )
         await asyncio.sleep(30)
@@ -529,7 +539,7 @@ async def advantage_spell_chok(client, msg):
             await client.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
         k = await msg.reply_photo(
             photo=info.SPELL_IMG,
-            caption=script.I_CUDNT.format(mv_rqst),
+            caption="No results found. Try another keyword or request from the support group. You can find the support group link in /help or /start.",
             reply_markup=InlineKeyboardMarkup(button)
         )
         await asyncio.sleep(30)
@@ -1654,5 +1664,3 @@ async def handle_owner_info_cb(client: Client, query: CallbackQuery):
         parse_mode=enums.ParseMode.HTML
     )
     await query.answer('Support Us By Sharing The Channel And Bot')
-
-[end of plugins/pm_filter.py]
