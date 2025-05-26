@@ -4,7 +4,7 @@ import re
 import base64
 
 from pyrogram.file_id import FileId
-from pymongo import MongoClient # Changed from motor.motor_asyncio
+from pymongo import AsyncMongoClient # Changed from motor.motor_asyncio
 from pymongo.errors import DuplicateKeyError
 from umongo import Instance, Document, fields
 # Removed: from motor.motor_asyncio import AsyncIOMotorClient 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # Initialize asynchronous client, database and uMongo instance.
-client = MongoClient(info.DATABASE_URI) # Changed from AsyncIOMotorClient
+client = AsyncMongoClient(info.DATABASE_URI) # Changed from AsyncIOMotorClient
 db = client[info.DATABASE_NAME]
 instance = Instance.from_db(db) # Assuming umongo handles the pymongo.Database object for async
 

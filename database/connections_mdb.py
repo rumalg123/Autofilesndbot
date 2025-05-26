@@ -1,4 +1,4 @@
-from pymongo import MongoClient # Changed from motor.motor_asyncio
+from pymongo import AsyncMongoClient # Changed from motor.motor_asyncio
 import info
 import logging
 
@@ -7,7 +7,7 @@ logger.setLevel(logging.ERROR)
 
 # Create a MongoDB client using PyMongo.
 # PyMongo's MongoClient can be used with async/await in modern Python.
-client = MongoClient(info.DATABASE_URI) # Changed from motor.motor_asyncio.AsyncIOMotorClient
+client = AsyncMongoClient(info.DATABASE_URI) # Changed from motor.motor_asyncio.AsyncIOMotorClient
 db = client[info.DATABASE_NAME]
 collection = db['CONNECTION']
 

@@ -1,4 +1,4 @@
-from pymongo import MongoClient # Changed from motor.motor_asyncio
+from pymongo import AsyncMongoClient # Changed from motor.motor_asyncio
 import info
 from datetime import datetime, date, time, timedelta
 import logging
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class Database:
     
     def __init__(self, uri, database_name):
-        self._client = MongoClient(uri) # Changed from AsyncIOMotorClient
+        self._client = AsyncMongoClient(uri) # Changed from AsyncIOMotorClient
         self.db = self._client[database_name]
         self.col = self.db.users   # Users collection
         self.grp = self.db.groups  # Groups collection
