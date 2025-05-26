@@ -178,13 +178,48 @@ async def answer(bot, query):
             logging.exception(str(e))
     else:
         switch_pm_text = f'{emoji.CROSS_MARK} 𝖭𝗈 𝖱𝖾𝗌𝗎𝗅𝗍𝗌 𝖥𝗈𝗎𝗇𝖽'
-        if string:
+        if string: # string is the actual search query text
             switch_pm_text += f' for "{string}"'
+
+        # Logging "No Results" to LOG_CHANNEL
+        try:
+            log_text = (
+                f"⚠️ No Results Found (Inline Search) ⚠️\n"
+                f"User ID: {query.from_user.id} ({query.from_user.mention or 'N/A'})\n"
+                f"Query: {string}\n" 
+                f"File Type Filter: {file_type if file_type else 'Any'}"
+            )
+            if info.LOG_CHANNEL: # Ensure LOG_CHANNEL is set
+                await bot.send_message( # Use 'bot' instance passed to 'answer'
+                    chat_id=info.LOG_CHANNEL,
+                    text=log_text
+                )
+            else:
+                logger.warning("LOG_CHANNEL not set. Cannot log 'No Results' for Inline Search.")
+        except Exception as e:
+            logger.error(f"Failed to log 'No Results' (Inline Search) to LOG_CHANNEL: {e}", exc_info=True)
+
+        # User-facing "no results" indication via switch_pm_text
+        # This part is controlled by info.NO_RESULTS_MSG for actual display in PM,
+        # but the inline UI will show the switch_pm_text regardless.
+        # If NO_RESULTS_MSG is False, we still answer the query, just potentially with a less verbose switch_pm_text.
+        # However, the current logic already provides a non-intrusive "No Results Found" via switch_pm_text.
+        # The main point is not to send an *additional* message if NO_RESULTS_MSG is False.
+        # The existing switch_pm_text is fine.
+        
+        final_switch_pm_text = switch_pm_text
+        if not info.NO_RESULTS_MSG:
+            # If NO_RESULTS_MSG is False, we might want a more generic placeholder,
+            # or simply rely on the empty results list. For now, let's keep it simple.
+            # The current switch_pm_text is not a direct message, so it's less critical.
+            # Alternatively, could set to a very minimal "No results."
+            final_switch_pm_text = "No results."
+
 
         await query.answer(results=[],
                            is_personal = True, 
                            cache_time=cache_time,
-                           switch_pm_text=switch_pm_text,
+                           switch_pm_text=final_switch_pm_text, # Use the potentially modified text
                            switch_pm_parameter="okay")
 
 

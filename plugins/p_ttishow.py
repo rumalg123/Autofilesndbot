@@ -71,7 +71,7 @@ async def save_group(client, message): # Renamed bot to client
                 )
                 
         if settings["auto_delete"]:
-            await asyncio.sleep(600) # Consider making this duration configurable
+            await asyncio.sleep(info.AUTO_DELETE_MESSAGE_TIME) 
             if 'welcome' in temp.MELCOW and temp.MELCOW['welcome']:
                 try:
                     await temp.MELCOW['welcome'].delete()

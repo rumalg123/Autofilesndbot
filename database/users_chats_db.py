@@ -1,7 +1,8 @@
 from pymongo import MongoClient # Changed from motor.motor_asyncio
 import info
-from datetime import datetime, date, time 
+from datetime import datetime, date, time, timedelta
 import logging
+from info import LOG_CHANNEL # Import LOG_CHANNEL
 
 logger = logging.getLogger(__name__)
 
@@ -13,16 +14,19 @@ class Database:
         self.col = self.db.users   # Users collection
         self.grp = self.db.groups  # Groups collection
 
-    def new_user(self, id, name):
+    def new_user(self, id, first_name, username, name=None): # Added first_name, username
         return dict(
             id=id,
-            name=name,
+            name=name if name else first_name, # Default name to first_name if not provided
+            first_name=first_name, # New field
+            username=username, # New field
             ban_status={
                 'is_banned': False,
                 'ban_reason': "",
             },
             is_premium=False,
-            premium_activation_date=None, 
+            premium_activation_date=None,
+            premium_expiration_date=None, 
             daily_retrieval_count=0,
             last_retrieval_date=None, 
         )
@@ -37,8 +41,8 @@ class Database:
             },
         )
     
-    async def add_user(self, id, name):
-        user = self.new_user(id, name)
+    async def add_user(self, id, first_name, username, name=None): # Modified signature
+        user = self.new_user(id, first_name, username, name=name) # Pass all args
         await self.col.insert_one(user)
     
     async def is_user_exist(self, id):
@@ -155,17 +159,27 @@ class Database:
             logger.info(f"Adding user {user_id} to premium.")
         else:
             logger.info(f"Removing user {user_id} from premium.")
-        activation_date = datetime.utcnow() if is_premium else None 
+        
+        activation_date = datetime.utcnow() if is_premium else None
+        premium_expiration_date = None
+        if is_premium:
+            premium_expiration_date = datetime.utcnow() + timedelta(days=info.PREMIUM_DURATION_DAYS)
+            
         await self.col.update_one(
             {'id': user_id},
-            {'$set': {'is_premium': is_premium, 'premium_activation_date': activation_date}}
+            {'$set': {
+                'is_premium': is_premium, 
+                'premium_activation_date': activation_date,
+                'premium_expiration_date': premium_expiration_date
+                }}
         )
 
     async def increment_retrieval_count(self, user_id):
         user = await self.col.find_one({'id': user_id})
         if not user:
-            # If user does not exist, add them with a default name and re-fetch.
-            await self.add_user(user_id, f"User {user_id}")
+            # If user does not exist, add them with default/placeholder values.
+            # These should ideally be updated when the user properly interacts with /start.
+            await self.add_user(user_id, "User", None, name=f"User {user_id}")
             user = await self.col.find_one({'id': user_id})
             if not user: # Should ideally not happen after add_user
                 logger.error(f"Failed to add or find user {user_id} after attempting to add them in increment_retrieval_count.")
@@ -201,24 +215,103 @@ class Database:
     async def get_user_data(self, user_id):
         user = await self.col.find_one({'id': user_id})
         if not user:
-            # If user doesn't exist, add them with a default name and then return their data.
-            await self.add_user(user_id, f"User {user_id}")
+            # If user doesn't exist, add them with default/placeholder values.
+            # These should ideally be updated when the user properly interacts with /start.
+            await self.add_user(user_id, "User", None, name=f"User {user_id}")
             user = await self.col.find_one({'id': user_id})
             if not user: # Should ideally not happen if add_user was successful
                  logger.error(f"Failed to add or find user {user_id} after attempting to add them in get_user_data.")
                  return { # Return a default structure in case of very rare failure
+                    'id': user_id,
+                    'name': f"User {user_id}",
+                    'first_name': "User", 
+                    'username': None, 
                     'is_premium': False,
                     'premium_activation_date': None,
+                    'premium_expiration_date': None, 
                     'daily_retrieval_count': 0,
                     'last_retrieval_date': None
                 }
 
         return {
+            'id': user.get('id'),
+            'name': user.get('name'),
+            'first_name': user.get('first_name'),
+            'username': user.get('username'),
             'is_premium': user.get('is_premium', False),
             'premium_activation_date': user.get('premium_activation_date'),
+            'premium_expiration_date': user.get('premium_expiration_date'),
             'daily_retrieval_count': user.get('daily_retrieval_count', 0),
             'last_retrieval_date': user.get('last_retrieval_date')
         }
+
+    async def check_expired_premium(self, bot):
+        try:
+            now = datetime.utcnow()
+            # Find users whose premium has expired
+            expired_users_cursor = self.col.find({
+                "is_premium": True,
+                "premium_expiration_date": {"$lt": now}
+            })
+
+            async for user in expired_users_cursor:
+                user_id = user['id']
+                logger.info(f"Premium expired for User ID: {user_id}. Removing premium status.")
+                
+                # Update user's premium status in the database
+                await self.col.update_one(
+                    {'id': user_id},
+                    {'$set': {
+                        'is_premium': False,
+                        'premium_expiration_date': None,
+                        'premium_activation_date': None  # Reset activation date as well
+                    }}
+                )
+                
+                # Log to LOG_CHANNEL
+                if LOG_CHANNEL:
+                    try:
+                        await bot.send_message(
+                            chat_id=LOG_CHANNEL,
+                            text=f"Premium expired for User ID: {user_id}. Premium status has been removed."
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send premium expiration log to LOG_CHANNEL for User ID {user_id}: {e}")
+                else:
+                    logger.warning("LOG_CHANNEL not set. Cannot send premium expiration log.")
+
+        except Exception as e:
+            logger.error(f"Error in check_expired_premium: {e}")
+
+    async def update_user_info_if_changed(self, user_id, current_first_name, current_username):
+        # Ensure current_first_name is not None or empty, provide a default
+        if not current_first_name:
+            current_first_name = "User" # Default if first_name is empty
+
+        user_exists = await self.is_user_exist(user_id)
+        if user_exists:
+            stored_user_data = await self.get_user_data(user_id)
+            # Check if get_user_data returned valid data (not the error default)
+            if stored_user_data and stored_user_data.get('id') == user_id: 
+                if stored_user_data.get('first_name') != current_first_name or \
+                   stored_user_data.get('username') != current_username or \
+                   stored_user_data.get('name') != current_first_name: # Also check 'name'
+                    await self.col.update_one(
+                        {'id': user_id},
+                        {'$set': {
+                            'first_name': current_first_name,
+                            'username': current_username,
+                            'name': current_first_name # Update 'name' to current_first_name
+                        }}
+                    )
+                    logger.info(f"Updated user info for {user_id}: Name='{current_first_name}', Username='{current_username}'")
+            else: # This case might happen if get_user_data returned its minimal default due to an issue
+                logger.warning(f"Could not retrieve full stored data for user {user_id} during update check. Re-adding.")
+                await self.add_user(user_id, current_first_name, current_username, name=current_first_name)
+                logger.info(f"User {user_id} re-added with info: Name='{current_first_name}', Username='{current_username}'")
+        else:
+            await self.add_user(user_id, current_first_name, current_username, name=current_first_name) # Pass name explicitly
+            logger.info(f"New user added {user_id}: Name='{current_first_name}', Username='{current_username}'")
 
 
 db = Database(info.DATABASE_URI, info.DATABASE_NAME)

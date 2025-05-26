@@ -388,19 +388,32 @@ async def auto_filter(client, msg, spoll=False):
             if not files:
                 if settings['spell_check']: 
                     return await advantage_spell_chok(client, msg)
-                else: # Spell check is off
-                    if message.chat.type == enums.ChatType.PRIVATE: # Check if it's a PM
-                        await client.send_message(
-                            chat_id=message.chat.id,
-                            text="No results found. Try another keyword or request from the support group. You can find the support group link in /help or /start."
+                else: # Spell check is off and no files found directly
+                    user_id = message.from_user.id
+                    user_mention = message.from_user.mention
+                    
+                    # 1. User-facing message
+                    if info.NO_RESULTS_MSG:
+                        await message.reply_text(f"Sorry, no results found for your query: '{search_query_text}'\n\nTry another keyword or request from the support group. You can find the support group link in /help or /start.")
+
+                    # 2. Logging to LOG_CHANNEL
+                    try:
+                        log_text = (
+                            f"⚠️ No Results Found (Auto Filter) ⚠️\n"
+                            f"User ID: {user_id} ({user_mention})\n"
+                            f"Query: {search_query_text}\n"
+                            f"Chat ID: {message.chat.id}\n"
+                            f"Spell Check: Off"
                         )
-                    # For group chats, no message is sent directly to the chat if spell_check is off and no files are found.
-                    # Logging to LOG_CHANNEL happens if info.NO_RESULTS_MSG is True, which is a separate condition.
-                    elif info.NO_RESULTS_MSG and message.chat.type != enums.ChatType.PRIVATE: 
-                        await client.send_message(
-                            chat_id=info.LOG_CHANNEL, 
-                            text=(script.NORSLTS.format(reqstr.id, reqstr.mention, search_query_text))
-                        )
+                        if info.LOG_CHANNEL: # Ensure LOG_CHANNEL is set
+                            await client.send_message(
+                                chat_id=info.LOG_CHANNEL,
+                                text=log_text
+                            )
+                        else:
+                            logger.warning("LOG_CHANNEL not set. Cannot log 'No Results' for Auto Filter.")
+                    except Exception as e:
+                        logger.error(f"Failed to log 'No Results' (Auto Filter) to LOG_CHANNEL: {e}", exc_info=True)
                     return
         else: 
             return
@@ -491,7 +504,7 @@ async def auto_filter(client, msg, spoll=False):
         sent_message_to_delete = await reply_target_message.reply_photo(photo=info.NOR_IMG, caption=final_caption, reply_markup=reply_markup)
 
     if settings['auto_delete'] and sent_message_to_delete: 
-        await asyncio.sleep(600) 
+        await asyncio.sleep(info.AUTO_DELETE_MESSAGE_TIME) 
         await sent_message_to_delete.delete()
         if not spoll : await message.delete() 
 
@@ -519,11 +532,63 @@ async def advantage_spell_chok(client, msg):
         button = [[
                    InlineKeyboardButton("🔎 𝖦𝗈𝗈𝗀𝗅𝖾", url=f"https://www.google.com/search?q={reqst_gle}")
         ]]
-        if info.NO_RESULTS_MSG:
-            await client.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
-        k = await msg.reply_photo(
-            photo=info.SPELL_IMG,
-            caption="No results found. Try another keyword or request from the support group. You can find the support group link in /help or /start.",
+        # Log "No Results" from spell check suggestion - This part is when get_poster itself fails or returns no initial movies for spell check
+        try:
+            log_text = (
+                f"⚠️ No Results Found (Spell Check Initial) ⚠️\n"
+                f"User ID: {reqstr.id} ({reqstr.mention})\n"
+                f"Original Query: {mv_rqst}\n" # mv_rqst is the original user query
+                f"Attempted Spell Check Query (Internal): {query}\n" # 'query' is the processed query for get_poster
+                f"Chat ID: {msg.chat.id}"
+            )
+            if info.LOG_CHANNEL:
+                await client.send_message(chat_id=info.LOG_CHANNEL, text=log_text)
+            else:
+                logger.warning("LOG_CHANNEL not set. Cannot log 'No Results' for Spell Check Initial.")
+        except Exception as e:
+            logger.error(f"Failed to log 'No Results' (Spell Check Initial) to LOG_CHANNEL: {e}", exc_info=True)
+
+        if info.NO_RESULTS_MSG: # User-facing message
+            k = await msg.reply_photo(
+                photo=info.SPELL_IMG,
+                caption="No results found. Try another keyword or request from the support group. You can find the support group link in /help or /start.",
+                reply_markup=InlineKeyboardMarkup(button)
+            )
+            await asyncio.sleep(30) # Consider making this delay configurable
+            await k.delete()
+        return
+    movielist = []
+    if not movies: # This block is if get_poster(bulk=True) returns an empty list (no movie titles for suggestions)
+        reqst_gle = mv_rqst.replace(" ", "+")
+        button = [[
+                   InlineKeyboardButton("🔎 𝖦𝗈𝗈𝗀𝗅𝖾", url=f"https://www.google.com/search?q={reqst_gle}")
+        ]]
+        # Log "No Results" from spell check movie list generation
+        try:
+            log_text = (
+                f"⚠️ No Suggested Movies Found (Spell Check List) ⚠️\n"
+                f"User ID: {reqstr.id} ({reqstr.mention})\n"
+                f"Original Query: {mv_rqst}\n"
+                f"Chat ID: {msg.chat.id}"
+            )
+            if info.LOG_CHANNEL:
+                await client.send_message(chat_id=info.LOG_CHANNEL, text=log_text)
+            else:
+                logger.warning("LOG_CHANNEL not set. Cannot log 'No Suggested Movies' for Spell Check List.")
+        except Exception as e:
+            logger.error(f"Failed to log 'No Suggested Movies' (Spell Check List) to LOG_CHANNEL: {e}", exc_info=True)
+
+        if info.NO_RESULTS_MSG: # User-facing message
+            k = await msg.reply_photo(
+                photo=info.SPELL_IMG,
+                caption="No results found. Try another keyword or request from the support group. You can find the support group link in /help or /start.",
+                reply_markup=InlineKeyboardMarkup(button)
+            )
+            await asyncio.sleep(30) # Consider making this delay configurable
+            await k.delete()
+        return
+    movielist += [movie.get('title') for movie in movies]
+    movielist += [f"{movie.get('title')} {movie.get('year')}" for movie in movies]
             reply_markup=InlineKeyboardMarkup(button)
         )
         await asyncio.sleep(30)
@@ -564,7 +629,7 @@ async def advantage_spell_chok(client, msg):
         reply_markup=InlineKeyboardMarkup(btn),quote=True
     )
     if settings['auto_delete']:
-        await asyncio.sleep(600)
+        await asyncio.sleep(info.AUTO_DELETE_MESSAGE_TIME)
         await spell_check_del.delete()
 
 
@@ -613,7 +678,7 @@ async def manual_filters(client, message, text=False):
                                     await piroxrk.delete()
                             else:
                                 if settings['auto_delete']:
-                                    await asyncio.sleep(600)
+                                    await asyncio.sleep(info.AUTO_DELETE_MESSAGE_TIME)
                                     await piroxrk.delete()
                         else:
                             button = eval(btn)
@@ -631,7 +696,7 @@ async def manual_filters(client, message, text=False):
                                     await piroxrk.delete()
                             else:
                                 if settings['auto_delete']:
-                                    await asyncio.sleep(600)
+                                    await asyncio.sleep(info.AUTO_DELETE_MESSAGE_TIME)
                                     await piroxrk.delete()
                     elif btn == "[]":
                         piroxrk = await client.send_cached_media(
@@ -647,7 +712,7 @@ async def manual_filters(client, message, text=False):
                                 await piroxrk.delete()
                         else:
                             if settings['auto_delete']:
-                                await asyncio.sleep(600)
+                                await asyncio.sleep(info.AUTO_DELETE_MESSAGE_TIME)
                                 await piroxrk.delete()
                     else:
                         button = eval(btn)
@@ -663,7 +728,7 @@ async def manual_filters(client, message, text=False):
                                 await piroxrk.delete()
                         else:
                             if settings['auto_delete']:
-                                await asyncio.sleep(600)
+                                await asyncio.sleep(info.AUTO_DELETE_MESSAGE_TIME)
                                 await piroxrk.delete()
                 except Exception as e:
                     logger.exception(e)
@@ -716,7 +781,7 @@ async def global_filters(client, message, text=False):
                                         await piroxrk.delete()
                                 else:
                                     if settings['auto_delete']:
-                                        await asyncio.sleep(600)
+                                        await asyncio.sleep(info.AUTO_DELETE_MESSAGE_TIME)
                                         await piroxrk.delete()
                             else: 
                                 if settings['auto_delete']: 
@@ -738,7 +803,7 @@ async def global_filters(client, message, text=False):
                                         await piroxrk.delete()
                                 else:
                                     if settings['auto_delete']:
-                                        await asyncio.sleep(600)
+                                        await asyncio.sleep(info.AUTO_DELETE_MESSAGE_TIME)
                                         await piroxrk.delete()
                             else: 
                                 if settings['auto_delete']: 
@@ -759,7 +824,7 @@ async def global_filters(client, message, text=False):
                                     await piroxrk.delete()
                             else:
                                 if settings['auto_delete']:
-                                    await asyncio.sleep(600)
+                                    await asyncio.sleep(info.AUTO_DELETE_MESSAGE_TIME)
                                     await piroxrk.delete()
                         else: 
                             if settings['auto_delete']: 
@@ -780,7 +845,7 @@ async def global_filters(client, message, text=False):
                                     await piroxrk.delete()
                             else:
                                 if settings['auto_delete']:
-                                    await asyncio.sleep(600)
+                                    await asyncio.sleep(info.AUTO_DELETE_MESSAGE_TIME)
                                     await piroxrk.delete()
                         else: 
                             if settings['auto_delete']: 

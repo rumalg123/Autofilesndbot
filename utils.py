@@ -437,6 +437,105 @@ def remove_escapes(text: str) -> str:
     return res
 
 
+async def check_user_access(client, message, user_id, *, increment: bool = False): # client is available here
+    """Checks user access, handles premium status, and daily limits."""
+    # OWNER_ID, PREMIUM_DURATION_DAYS, NON_PREMIUM_DAILY_LIMIT are from info
+    # db is from database.users_chats_db
+    # datetime, date, timedelta from datetime
+    # UserIsBlocked from pyrogram.errors (if client.send_message is used directly here)
+    
+    if info.ADMINS and user_id == info.ADMINS[0]: # Assuming OWNER_ID is the first admin
+        return True, "Owner access: Unlimited"
+
+    user_data = await db.get_user_data(user_id)
+
+    if not user_data or not user_data.get('id'): # Check if user_data is minimal or user not fully added
+        # This case indicates user might not exist or was added with placeholder by get_user_data/increment_retrieval_count
+        # Let's try to add them more formally if message context is available
+        user_first_name = "User"
+        user_username = None
+        if message and message.from_user:
+            user_first_name = message.from_user.first_name if message.from_user.first_name else "User"
+            user_username = message.from_user.username
+        
+        # Check again if user exists after attempting to get data, to avoid re-adding if get_user_data added a placeholder
+        if not await db.is_user_exist(user_id):
+             await db.add_user(user_id, user_first_name, user_username, name=user_first_name)
+             logger.info(f"User {user_id} was not found or was partial, re-added/updated via check_user_access.")
+        user_data = await db.get_user_data(user_id) # Reload user_data
+
+    now_utc = datetime.utcnow()
+
+    if user_data.get('is_premium'):
+        expiration_date = user_data.get('premium_expiration_date')
+        
+        if expiration_date:
+            if isinstance(expiration_date, str):
+                try:
+                    expiration_date = datetime.fromisoformat(expiration_date)
+                except ValueError:
+                    logger.error(f"Invalid premium_expiration_date string format for user {user_id}: {expiration_date}")
+                    expiration_date = None # Treat as invalid
+            
+            if isinstance(expiration_date, datetime):
+                if now_utc > expiration_date:
+                    logger.info(f"Premium expired for user {user_id} on {expiration_date}. Downgrading.")
+                    await db.update_premium_status(user_id, False) 
+                    user_data['is_premium'] = False # Reflect change locally
+                    try:
+                        await client.send_message(
+                            chat_id=user_id,
+                            text="Your premium subscription has expired. You are now on the free plan."
+                        )
+                    except UserIsBlocked:
+                        logger.warning(f"User {user_id} has blocked the bot. Could not send premium expiry PM.")
+                    except Exception as e:
+                        logger.error(f"Failed to send premium expiry PM to {user_id}: {e}")
+                    # Fall through to non-premium checks for the current request
+                else:
+                    return True, "Premium access"  # Active premium
+            else: # Not a datetime object after potential parsing
+                logger.error(f"User {user_id} has is_premium=True but premium_expiration_date is not a valid datetime: {expiration_date}. Treating as non-premium.")
+                # Fall through to non-premium checks
+        else:  # is_premium is True but no premium_expiration_date
+            logger.warning(f"User {user_id} is_premium=True but no premium_expiration_date. Treating as non-premium.")
+            # Fall through to non-premium checks
+
+    # Non-premium user logic (or expired/problematic premium)
+    # Use last_retrieval_date and daily_retrieval_count from user_data
+    raw_last = user_data.get("last_retrieval_date")
+    raw_count = user_data.get("daily_retrieval_count", 0)
+
+    last_day = None
+    if isinstance(raw_last, datetime):
+        last_day = raw_last.date()
+    elif isinstance(raw_last, str):
+        try:
+            last_day = date.fromisoformat(raw_last.split("T")[0]) # Handle ISO format string
+        except ValueError:
+            try:
+                last_day = date.fromisoformat(raw_last) # Handle date string
+            except ValueError:
+                logger.error(f"Invalid last_retrieval_date string format for user {user_id}: {raw_last}")
+    elif isinstance(raw_last, date): # Handle if it's already a date object
+        last_day = raw_last
+    
+    if last_day != now_utc.date(): # If last retrieval was not today, reset count
+        raw_count = 0
+
+    if raw_count >= info.NON_PREMIUM_DAILY_LIMIT:
+        limit_msg = f"You have reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Send /plan to see available plans and upgrade to premium."
+        # This part is tricky: if premium just expired *within this function call*, we need to convey that.
+        # The user_data['is_premium'] = False would have been set above.
+        if not user_data.get('is_premium') and user_data.get('premium_expiration_date') and isinstance(user_data.get('premium_expiration_date'), datetime) and now_utc > user_data.get('premium_expiration_date'):
+             limit_msg = f"Your premium has expired and you have now reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Send /plan to see available plans and upgrade to premium."
+        return False, limit_msg
+
+    if increment:
+        await db.increment_retrieval_count(user_id)
+    return True, "Non-premium access"
+
+
 def humanbytes(size):
     if not size:
         return ""
@@ -447,6 +546,80 @@ def humanbytes(size):
         size /= power
         n += 1
     return str(round(size, 2)) + " " + Dic_powerN[n] + 'B'
+
+async def is_chat_admin_or_bot_admin(client, chat_id, user_id) -> bool:
+    """Checks if a user is an admin/owner of a chat or a bot admin."""
+    if user_id in info.ADMINS: # Bot Admin check
+        return True
+    try:
+        member = await client.get_chat_member(chat_id, user_id)
+        if member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]:
+            return True
+    except Exception as e:
+        # Log the error but don't propagate; if user isn't found or other issue, they're not admin.
+        logger.warning(f"Could not determine chat admin status for user {user_id} in chat {chat_id}: {e}")
+    return False
+
+def generate_file_caption(original_caption: str, title: str, size: str, is_batch: bool = False) -> str:
+    """
+    Generates a file caption based on system settings (KEEP_ORIGINAL_CAPTION, CUSTOM_FILE_CAPTION, BATCH_FILE_CAPTION).
+    """
+    f_caption = None
+    
+    # Ensure inputs are strings, provide defaults if None
+    original_caption = original_caption or ""
+    title = title or ""
+    size = size or ""
+
+    if info.KEEP_ORIGINAL_CAPTION:
+        f_caption = original_caption if original_caption else title
+    else:
+        caption_template_to_use = info.BATCH_FILE_CAPTION if is_batch else info.CUSTOM_FILE_CAPTION
+        if caption_template_to_use:
+            try:
+                f_caption = caption_template_to_use.format(
+                    file_name=title,
+                    file_size=size,
+                    file_caption=original_caption 
+                )
+            except Exception as e:
+                logger.error(f"Error formatting caption (is_batch={is_batch}): {e}", exc_info=True)
+                # Fallback to original caption or title if formatting fails
+                f_caption = original_caption if original_caption else title
+        else: # No custom/batch template, but KEEP_ORIGINAL_CAPTION is also false
+            f_caption = title # Default to title
+
+    # Final fallback if f_caption is still None or empty string after logic
+    if not f_caption:
+        f_caption = title
+        
+    return f_caption
+
+async def send_message_to_user(client, user_id: int, text: str, reply_markup=None, **kwargs) -> bool:
+    """
+    Sends a message to a user, handling UserIsBlocked and other common exceptions.
+    Returns True if message was sent successfully, False otherwise.
+    Additional kwargs are passed to client.send_message.
+    """
+    try:
+        await client.send_message(
+            chat_id=user_id,
+            text=text,
+            reply_markup=reply_markup,
+            **kwargs
+        )
+        return True
+    except UserIsBlocked:
+        logger.warning(f"User {user_id} has blocked the bot. Could not send message.")
+    except InputUserDeactivated:
+        logger.warning(f"User {user_id} is deactivated. Could not send message.")
+        # Consider deleting user from DB here if appropriate for the bot's logic
+        # await db.delete_user(user_id) 
+    except PeerIdInvalid:
+        logger.warning(f"User ID {user_id} is invalid (PeerIdInvalid). Could not send message.")
+    except Exception as e:
+        logger.error(f"Failed to send message to user {user_id}: {e}", exc_info=True)
+    return False
 
 async def send_all(bot, userid, files, ident):
     for file in files:

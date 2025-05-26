@@ -12,7 +12,7 @@ from database.filters_mdb import(
 )
 
 from database.connections_mdb import active_connection
-from utils import get_file_id, parser, split_quotes
+from utils import get_file_id, parser, split_quotes, is_chat_admin_or_bot_admin # Added is_chat_admin_or_bot_admin
 import info
 
 logger = logging.getLogger(__name__) # Added
@@ -51,18 +51,8 @@ async def addfilter(client, message):
         # Should not happen if filters are set correctly
         return 
 
-    try:
-        user_chat_status = await client.get_chat_member(target_group_id, user_id) # Renamed st
-        if not (
-            user_chat_status.status == enums.ChatMemberStatus.ADMINISTRATOR
-            or user_chat_status.status == enums.ChatMemberStatus.OWNER
-            or str(user_id) in info.ADMINS
-        ):
-            # No reply if user is not admin, or silently return
-            return 
-    except Exception as e:
-        logger.error(f"Error checking chat member status for user {user_id} in group {target_group_id}: {e}", exc_info=True)
-        return # In case of error, don't proceed
+    if not await is_chat_admin_or_bot_admin(client, target_group_id, user_id):
+        return # Silently return if not admin
 
     if len(args) < 2:
         await message.reply_text("Command Incomplete :(", quote=True)
@@ -194,18 +184,8 @@ async def view_filters(client, message): # Renamed get_all to view_filters
     else:
         return
 
-    try:
-        user_chat_status = await client.get_chat_member(target_group_id, user_id) # Renamed st
-        if not (
-            user_chat_status.status == enums.ChatMemberStatus.ADMINISTRATOR
-            or user_chat_status.status == enums.ChatMemberStatus.OWNER
-            or str(user_id) in info.ADMINS
-        ):
-            return # No reply if not admin
-    except Exception as e:
-        logger.error(f"Error checking chat member status for user {user_id} in group {target_group_id} (view_filters): {e}", exc_info=True)
-        return
-
+    if not await is_chat_admin_or_bot_admin(client, target_group_id, user_id):
+        return # Silently return if not admin
 
     filter_keywords = await get_filters(target_group_id) # Renamed texts
     count = await count_filters(target_group_id)
@@ -266,18 +246,8 @@ async def deletefilter(client, message):
     else:
         return
 
-    try:
-        user_chat_status = await client.get_chat_member(target_group_id, user_id) # Renamed st
-        if not (
-            user_chat_status.status == enums.ChatMemberStatus.ADMINISTRATOR
-            or user_chat_status.status == enums.ChatMemberStatus.OWNER
-            or str(user_id) in info.ADMINS
-        ):
-            return
-    except Exception as e:
-        logger.error(f"Error checking chat member status for user {user_id} in group {target_group_id} (deletefilter): {e}", exc_info=True)
-        return
-
+    if not await is_chat_admin_or_bot_admin(client, target_group_id, user_id):
+        return # Silently return if not admin
 
     try:
         cmd, filter_keyword_to_delete_cmd = message.text.split(" ", 1) # Renamed text
@@ -326,17 +296,21 @@ async def delallconfirm(client, message): # Renamed from delallconfirm, though t
     else:
         return
 
-    try:
-        user_chat_status = await client.get_chat_member(target_group_id, user_id) # Renamed st
-        if not (
-            user_chat_status.status == enums.ChatMemberStatus.OWNER # Only owner or bot admins can delete all
-            or str(user_id) in info.ADMINS
-        ):
-            await message.reply_text("You need to be the group owner or a bot admin to delete all filters.", quote=True)
-            return
-    except Exception as e:
-        logger.error(f"Error checking chat member status for user {user_id} in group {target_group_id} (delallconfirm): {e}", exc_info=True)
+    # For delallconfirm, original logic was OWNER or bot ADMINS. 
+    # is_chat_admin_or_bot_admin allows chat admins too.
+    # We need to refine this check or the utility if specific roles like OWNER are strictly needed.
+    # For now, using the utility and then checking specific status if it's a group.
+    if not await is_chat_admin_or_bot_admin(client, target_group_id, user_id):
+        await message.reply_text("You do not have sufficient permissions.", quote=True) # Generic message
         return
+    
+    # If it's a group context, and we need to ensure it's OWNER for delall (not just any admin)
+    if chat_type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
+        if user_id not in info.ADMINS: # Bot admins can always proceed
+            member = await client.get_chat_member(target_group_id, user_id)
+            if member.status != enums.ChatMemberStatus.OWNER:
+                await message.reply_text("You need to be the group owner or a bot admin to delete all filters.", quote=True)
+                return
 
     await message.reply_text(
         f"This will delete all filters from '{title}'.\nDo you want to continue??",

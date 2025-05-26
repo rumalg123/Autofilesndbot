@@ -1,5 +1,6 @@
 import logging
 import logging.config
+import asyncio # Import asyncio
 
 # Get logging configurations
 logging.config.fileConfig('logging.conf')
@@ -61,6 +62,21 @@ class Bot(Client):
         await app.setup()
         bind_address = "0.0.0.0"
         await web.TCPSite(app, bind_address, PORT).start()
+
+        # Start the background task for checking premium expirations
+        asyncio.create_task(self.premium_expiration_checker())
+        logging.info("Premium expiration checker background task started.")
+
+    async def premium_expiration_checker(self):
+        while True:
+            try:
+                logging.info("Running daily check for expired premium users...")
+                await db.check_expired_premium(self) # Pass the bot instance (self)
+                logging.info("Finished checking for expired premium users. Next check in 24 hours.")
+            except Exception as e:
+                logging.error(f"Error during premium expiration check: {e}")
+            # Sleep for 24 hours
+            await asyncio.sleep(24 * 60 * 60)
 
     async def stop(self, *args):
         await super().stop()
