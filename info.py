@@ -38,7 +38,7 @@ UPSTREAM_BRANCH = environ.get('UPSTREAM_BRANCH', 'master')
 CACHE_TIME = int(environ.get('CACHE_TIME', 300))
 USE_CAPTION_FILTER = bool(environ.get('USE_CAPTION_FILTER', True))
 PREMIUM_DURATION_DAYS = int(environ.get('PREMIUM_DURATION_DAYS', 30))
-NON_PREMIUM_DAILY_LIMIT = int(environ.get('NON_PREMIUM_DAILY_LIMIT', 20))
+NON_PREMIUM_DAILY_LIMIT = int(environ.get('NON_PREMIUM_DAILY_LIMIT', 10))
 
 # Bot images & videos
 PICS = environ.get('PICS', 'https://graph.org/file/bdc720faf2ff35cf92563.jpg').split()
