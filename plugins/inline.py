@@ -133,7 +133,7 @@ async def answer(bot, query):
         if effective_count_for_today >= info.NON_PREMIUM_DAILY_LIMIT:
             await query.answer(results=[], 
                                cache_time=0, 
-                               switch_pm_text=f"Daily file view limit ({info.NON_PREMIUM_DAILY_LIMIT}) reached. Upgrade for more.", 
+                               switch_pm_text=f"Daily file view limit ({info.NON_PREMIUM_DAILY_LIMIT}) reached. Upgrade for more.\nUse /plans command to view premium plans for unlimited access.", 
                                switch_pm_parameter="premium_limit_inline")
             return # User cannot proceed with this query
         
@@ -202,9 +202,10 @@ async def answer(bot, query):
         except Exception as e:
             logging.exception(str(e))
     else:
-        switch_pm_text = f'{emoji.CROSS_MARK} 𝖭𝗈 𝖱𝖾𝗌𝗎𝗅𝗍𝗌 𝖥𝗈𝗎𝗇𝖽'
-        if string:
-            switch_pm_text += f' for "{string}"'
+        if string: # string is the user's query
+            switch_pm_text = f"No results found for '{string}'. Send a different keyword."
+        else:
+            switch_pm_text = "No results found. Send a different keyword."
 
         await query.answer(results=[],
                            is_personal = True,

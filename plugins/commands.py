@@ -102,11 +102,11 @@ async def check_user_access(client, message, user_id, *, increment: bool = False
 
 
     if raw_count >= info.NON_PREMIUM_DAILY_LIMIT:
-        limit_msg = f"You have reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access."
+        limit_msg = f"You have reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access.\nUse /plans command to view premium plans for unlimited access."
         # Check if premium had just expired in this same call
         if user_data.get(
                 'is_premium') and 'expiry_date' in locals() and datetime.now() > expiry_date:  # expiry_date would be defined if premium was checked
-            limit_msg = f"Your premium has expired and you have now reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access."
+            limit_msg = f"Your premium has expired and you have now reached your daily limit of {info.NON_PREMIUM_DAILY_LIMIT} file retrievals. Upgrade to premium for unlimited access.\nUse /plans command to view premium plans for unlimited access."
         return False, limit_msg
     if increment:
         new_count = await db.increment_retrieval_count(user_id)
@@ -138,6 +138,18 @@ async def add_premium_command(client, message):
     except Exception:
         user_mention = f"`{user_id_to_add}`"
 
+    # Log the premium status addition
+    admin_id = message.from_user.id
+    admin_mention = message.from_user.mention
+    log_message_text = (f"➕ **Premium Status Added** ➕\n\n"
+                        f"👤 **User:** {user_mention} (`{user_id_to_add}`)\n"
+                        f"👑 **Admin:** {admin_mention} (`{admin_id}`)\n"
+                        f"⏰ **Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    try:
+        await client.send_message(chat_id=info.LOG_CHANNEL, text=log_message_text)
+    except Exception as e:
+        logger.error(f"Failed to send premium add log to LOG_CHANNEL: {e}")
+
     await message.reply_text(f"Successfully upgraded {user_mention} to premium.")
     try:
         await client.send_message(user_id_to_add, "Congratulations! You have been upgraded to premium status.")
@@ -166,6 +178,18 @@ async def remove_premium_command(client, message):
         user_mention = user_info.mention if user_info else f"`{user_id_to_remove}`"
     except Exception:
         user_mention = f"`{user_id_to_remove}`"
+
+    # Log the premium status removal
+    admin_id = message.from_user.id
+    admin_mention = message.from_user.mention
+    log_message_text = (f"➖ **Premium Status Removed** ➖\n\n"
+                        f"👤 **User:** {user_mention} (`{user_id_to_remove}`)\n"
+                        f"👑 **Admin:** {admin_mention} (`{admin_id}`)\n"
+                        f"⏰ **Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    try:
+        await client.send_message(chat_id=info.LOG_CHANNEL, text=log_message_text)
+    except Exception as e:
+        logger.error(f"Failed to send premium remove log to LOG_CHANNEL: {e}")
 
     await message.reply_text(f"Successfully removed premium status from {user_mention}.")
     try:

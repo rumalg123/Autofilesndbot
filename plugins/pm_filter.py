@@ -293,17 +293,33 @@ async def advantage_spoll_choker(bot, query):
             files, offset, total_results = await get_search_results(query.message.chat.id, movie, offset=0, filter=True)
             if files:
                 k = (movie, files, offset, total_results)
-                await auto_filter(bot, query, k)
+                await auto_filter(bot, query, k) # auto_filter will handle displaying results or its own "no results"
             else:
-                reqstr1 = query.from_user.id if query.from_user else None
-                if reqstr1 is None:
-                    return
+                # This block is reached if a spell-check suggestion ('movie') results in no files.
+                # 'query.message' is the message showing the spell check suggestions.
+                # 'movie' is the specific suggestion clicked by the user.
+                
+                # Get user details for logging (user who originally sent the message)
+                # query.message.reply_to_message is the user's original message that triggered spell check.
+                user_original_message = query.message.reply_to_message
+                reqstr1 = user_original_message.from_user.id if user_original_message.from_user else None
+                
+                if reqstr1 is None: # Should ideally not happen if reply_to_message exists
+                    # Fallback to the user who clicked the callback if original user cannot be determined
+                    reqstr1 = query.from_user.id if query.from_user else None
+                    if reqstr1 is None:
+                        return # Cannot proceed without a user context for logging/messaging
+
                 reqstr = await bot.get_users(reqstr1)
+                
+                # Log that the spell-checked term also found no results
                 if info.NO_RESULTS_MSG:
                     await bot.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, movie)))
-                k = await query.message.edit(script.MVE_NT_FND)
-                await asyncio.sleep(10)
-                await k.delete()
+
+                # Edit the spell check suggestion message to show "No results found"
+                edited_message = await query.message.edit(f"No results found for '{movie}'. Send a different keyword.")
+                await asyncio.sleep(10)  # Maintain existing delay
+                await edited_message.delete() # Delete the message
 
 
 @Client.on_callback_query()
@@ -1332,9 +1348,11 @@ async def auto_filter(client, msg, spoll=False):
             files, offset, total_results = await get_search_results(message.chat.id ,search.lower(), offset=0, filter=True)
             if not files:
                 if settings["spell_check"]:
-                    return await advantage_spell_chok(client, msg)
+                    return await advantage_spell_chok(client, msg) # Spell check is ON, delegate to advantage_spell_chok
                 else:
-                    if info.NO_RESULTS_MSG:
+                    # Spell check is OFF and no files found
+                    await msg.reply_text(f"No results found for '{search}'. Send a different keyword.")
+                    if info.NO_RESULTS_MSG: # Maintain existing logging
                         await client.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, search)))
                     return
         else:
@@ -1491,7 +1509,7 @@ async def auto_filter(client, msg, spoll=False):
             hehe = await message.reply_photo(photo=imdb.get('poster'), caption=cap[:1024], reply_markup=InlineKeyboardMarkup(btn))
             try:
                 if settings['auto_delete']:
-                    await asyncio.sleep(600)
+                    await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                     await hehe.delete()
                     await message.delete()
             except KeyError:
@@ -1499,7 +1517,7 @@ async def auto_filter(client, msg, spoll=False):
                 await save_group_settings(grpid, 'auto_delete', True)
                 settings = await get_settings(message.chat.id)
                 if settings['auto_delete']:
-                    await asyncio.sleep(600)
+                    await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                     await hehe.delete()
                     await message.delete()
         except (MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty):
@@ -1508,7 +1526,7 @@ async def auto_filter(client, msg, spoll=False):
             hmm = await message.reply_photo(photo=poster, caption=cap[:1024], reply_markup=InlineKeyboardMarkup(btn))
             try:
                 if settings['auto_delete']:
-                    await asyncio.sleep(600)
+                    await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                     await hmm.delete()
                     await message.delete()
             except KeyError:
@@ -1516,7 +1534,7 @@ async def auto_filter(client, msg, spoll=False):
                 await save_group_settings(grpid, 'auto_delete', True)
                 settings = await get_settings(message.chat.id)
                 if settings['auto_delete']:
-                    await asyncio.sleep(600)
+                    await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                     await hmm.delete()
                     await message.delete()
         except Exception as e:
@@ -1524,7 +1542,7 @@ async def auto_filter(client, msg, spoll=False):
             fek = await message.reply_photo(photo=info.NOR_IMG, caption=cap, reply_markup=InlineKeyboardMarkup(btn))
             try:
                 if settings['auto_delete']:
-                    await asyncio.sleep(600)
+                    await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                     await fek.delete()
                     await message.delete()
             except KeyError:
@@ -1532,14 +1550,14 @@ async def auto_filter(client, msg, spoll=False):
                 await save_group_settings(grpid, 'auto_delete', True)
                 settings = await get_settings(message.chat.id)
                 if settings['auto_delete']:
-                    await asyncio.sleep(600)
+                    await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                     await fek.delete()
                     await message.delete()
     else:
         fuk = await message.reply_photo(photo=info.NOR_IMG, caption=cap, reply_markup=InlineKeyboardMarkup(btn))
         try:
             if settings['auto_delete']:
-                await asyncio.sleep(600)
+                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                 await fuk.delete()
                 await message.delete()
         except KeyError:
@@ -1547,7 +1565,7 @@ async def auto_filter(client, msg, spoll=False):
             await save_group_settings(grpid, 'auto_delete', True)
             settings = await get_settings(message.chat.id)
             if settings['auto_delete']:
-                await asyncio.sleep(600)
+                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                 await fuk.delete()
                 await message.delete()
     if spoll:
@@ -1569,34 +1587,30 @@ async def advantage_spell_chok(client, msg):
         movies = await get_poster(mv_rqst, bulk=True)
     except Exception as e:
         logger.exception(e)
-        reqst_gle = mv_rqst.replace(" ", "+")
-        button = [[
-                   InlineKeyboardButton("🔎 𝖦𝗈𝗈𝗀𝗅𝖾", url=f"https://www.google.com/search?q={reqst_gle}")
-        ]]
-        if info.NO_RESULTS_MSG:
+        # This block handles exceptions from get_poster (e.g., network issues)
+        # Apply the new "No results found" message here.
+        if info.NO_RESULTS_MSG: # Maintain existing logging
             await client.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
         k = await msg.reply_photo(
-            photo=info.SPELL_IMG,
-            caption=script.I_CUDNT.format(mv_rqst),
-            reply_markup=InlineKeyboardMarkup(button)
+            photo=info.SPELL_IMG, # Use SPELL_IMG as requested
+            caption=f"No results found for '{mv_rqst}'. Send a different keyword.",
+            # No separate button for Google search
         )
-        await asyncio.sleep(30)
+        await asyncio.sleep(30) # Maintain delay and delete
         await k.delete()
         return
     movielist = []
     if not movies:
-        reqst_gle = mv_rqst.replace(" ", "+")
-        button = [[
-                   InlineKeyboardButton("🔎 𝖦𝗈𝗈𝗀𝗅𝖾", url=f"https://www.google.com/search?q={reqst_gle}")
-        ]]
-        if info.NO_RESULTS_MSG:
+        # This is the primary block for when get_poster returns no movie suggestions.
+        if info.NO_RESULTS_MSG: # Maintain existing logging
             await client.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
+        
         k = await msg.reply_photo(
-            photo=info.SPELL_IMG,
-            caption=script.I_CUDNT.format(mv_rqst),
-            reply_markup=InlineKeyboardMarkup(button)
+            photo=info.SPELL_IMG, # Use SPELL_IMG as requested
+            caption=f"No results found for '{mv_rqst}'. Send a different keyword.",
+            # No separate button for Google search
         )
-        await asyncio.sleep(30)
+        await asyncio.sleep(30) # Maintain delay and delete
         await k.delete()
         return
     movielist += [movie.get('title') for movie in movies]
@@ -1619,14 +1633,14 @@ async def advantage_spell_chok(client, msg):
     )
     try:
         if settings['auto_delete']:
-            await asyncio.sleep(600)
+            await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
             await spell_check_del.delete()
     except KeyError:
             grpid = await active_connection(str(msg.from_user.id))
             await save_group_settings(grpid, 'auto_delete', True)
             settings = await get_settings(msg.chat.id)
             if settings['auto_delete']:
-                await asyncio.sleep(600)
+                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                 await spell_check_del.delete()
 
 
@@ -1687,14 +1701,14 @@ async def manual_filters(client, message, text=False):
                                 else:
                                     try:
                                         if settings['auto_delete']:
-                                            await asyncio.sleep(600)
+                                            await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                             await piroxrk.delete()
                                     except KeyError:
                                         grpid = await active_connection(str(message.from_user.id))
                                         await save_group_settings(grpid, 'auto_delete', True)
                                         settings = await get_settings(message.chat.id)
                                         if settings['auto_delete']:
-                                            await asyncio.sleep(600)
+                                            await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                             await piroxrk.delete()
                             except KeyError:
                                 grpid = await active_connection(str(message.from_user.id))
@@ -1730,14 +1744,14 @@ async def manual_filters(client, message, text=False):
                                 else:
                                     try:
                                         if settings['auto_delete']:
-                                            await asyncio.sleep(600)
+                                            await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                             await piroxrk.delete()
                                     except KeyError:
                                         grpid = await active_connection(str(message.from_user.id))
                                         await save_group_settings(grpid, 'auto_delete', True)
                                         settings = await get_settings(message.chat.id)
                                         if settings['auto_delete']:
-                                            await asyncio.sleep(600)
+                                            await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                             await piroxrk.delete()
                             except KeyError:
                                 grpid = await active_connection(str(message.from_user.id))
@@ -1770,14 +1784,14 @@ async def manual_filters(client, message, text=False):
                             else:
                                 try:
                                     if settings['auto_delete']:
-                                        await asyncio.sleep(600)
+                                        await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                         await piroxrk.delete()
                                 except KeyError:
                                     grpid = await active_connection(str(message.from_user.id))
                                     await save_group_settings(grpid, 'auto_delete', True)
                                     settings = await get_settings(message.chat.id)
                                     if settings['auto_delete']:
-                                        await asyncio.sleep(600)
+                                        await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                         await piroxrk.delete()
                         except KeyError:
                             grpid = await active_connection(str(message.from_user.id))
@@ -1810,14 +1824,14 @@ async def manual_filters(client, message, text=False):
                             else:
                                 try:
                                     if settings['auto_delete']:
-                                        await asyncio.sleep(600)
+                                        await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                         await piroxrk.delete()
                                 except KeyError:
                                     grpid = await active_connection(str(message.from_user.id))
                                     await save_group_settings(grpid, 'auto_delete', True)
                                     settings = await get_settings(message.chat.id)
                                     if settings['auto_delete']:
-                                        await asyncio.sleep(600)
+                                        await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                         await piroxrk.delete()
                         except KeyError:
                             grpid = await active_connection(str(message.from_user.id))
@@ -1890,14 +1904,14 @@ async def global_filters(client, message, text=False):
                                     else:
                                         try:
                                             if settings['auto_delete']:
-                                                await asyncio.sleep(600)
+                                                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                                 await piroxrk.delete()
                                         except KeyError:
                                             grpid = await active_connection(str(message.from_user.id))
                                             await save_group_settings(grpid, 'auto_delete', True)
                                             settings = await get_settings(message.chat.id)
                                             if settings['auto_delete']:
-                                                await asyncio.sleep(600)
+                                                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                                 await piroxrk.delete()
                                 except KeyError:
                                     grpid = await active_connection(str(message.from_user.id))
@@ -1945,14 +1959,14 @@ async def global_filters(client, message, text=False):
                                     else:
                                         try:
                                             if settings['auto_delete']:
-                                                await asyncio.sleep(600)
+                                                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                                 await piroxrk.delete()
                                         except KeyError:
                                             grpid = await active_connection(str(message.from_user.id))
                                             await save_group_settings(grpid, 'auto_delete', True)
                                             settings = await get_settings(message.chat.id)
                                             if settings['auto_delete']:
-                                                await asyncio.sleep(600)
+                                                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                                 await piroxrk.delete()
                                 except KeyError:
                                     grpid = await active_connection(str(message.from_user.id))
@@ -2050,14 +2064,14 @@ async def global_filters(client, message, text=False):
                                 else:
                                     try:
                                         if settings['auto_delete']:
-                                            await asyncio.sleep(600)
+                                                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                             await piroxrk.delete()
                                     except KeyError:
                                         grpid = await active_connection(str(message.from_user.id))
                                         await save_group_settings(grpid, 'auto_delete', True)
                                         settings = await get_settings(message.chat.id)
                                         if settings['auto_delete']:
-                                            await asyncio.sleep(600)
+                                                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                             await piroxrk.delete()
                             except KeyError:
                                 grpid = await active_connection(str(message.from_user.id))

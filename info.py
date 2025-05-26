@@ -39,6 +39,7 @@ CACHE_TIME = int(environ.get('CACHE_TIME', 300))
 USE_CAPTION_FILTER = bool(environ.get('USE_CAPTION_FILTER', True))
 PREMIUM_DURATION_DAYS = int(environ.get('PREMIUM_DURATION_DAYS', 30))
 NON_PREMIUM_DAILY_LIMIT = int(environ.get('NON_PREMIUM_DAILY_LIMIT', 10))
+MESSAGE_DELETE_SECONDS = int(environ.get('MESSAGE_DELETE_SECONDS', 300))
 
 # Bot images & videos
 PICS = environ.get('PICS', 'https://graph.org/file/bdc720faf2ff35cf92563.jpg').split()
@@ -115,7 +116,8 @@ LOG_STR += (f"MAX_LIST_ELM found, long lists will be shortened to the first {MAX
             else "Full list of casts and crew will be shown in the IMDB template; restrict them by adding a value to MAX_LIST_ELM.\n")
 LOG_STR += f"Your current IMDB template is {IMDB_TEMPLATE}\n"
 LOG_STR += f"Upstream Repo {UPSTREAM_REPO}\n"
-LOG_STR += f"Upstream Branch {UPSTREAM_BRANCH}"
+LOG_STR += f"Upstream Branch {UPSTREAM_BRANCH}\n"
+LOG_STR += f"Messages auto-delete after {MESSAGE_DELETE_SECONDS} seconds (if enabled for a chat).\n"
 
 # --- MongoDB Configuration Management Functions ---
 
@@ -183,6 +185,7 @@ def get_config_data_from_env():
         "START_TEXT": START_TEXT,
         "PREMIUM_DURATION_DAYS": PREMIUM_DURATION_DAYS,
         "NON_PREMIUM_DAILY_LIMIT": NON_PREMIUM_DAILY_LIMIT,
+        "MESSAGE_DELETE_SECONDS": MESSAGE_DELETE_SECONDS,
     }
     return config_data
 
@@ -253,4 +256,5 @@ MAIN_CHANNEL = CONFIG.get("MAIN_CHANNEL")
 START_TEXT = CONFIG.get("START_TEXT")
 PREMIUM_DURATION_DAYS = CONFIG.get("PREMIUM_DURATION_DAYS", PREMIUM_DURATION_DAYS)
 NON_PREMIUM_DAILY_LIMIT = CONFIG.get("NON_PREMIUM_DAILY_LIMIT", NON_PREMIUM_DAILY_LIMIT)
+MESSAGE_DELETE_SECONDS = CONFIG.get("MESSAGE_DELETE_SECONDS", MESSAGE_DELETE_SECONDS)
 
