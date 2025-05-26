@@ -227,6 +227,7 @@ async def handle_setgs_cb(client: Client, query: CallbackQuery):
     await query.message.edit_reply_markup(reply_markup)
     await query.answer('Support Us By Sharing The Channel And Bot')
 
+
 @Client.on_callback_query()
 async def cb_handler(client: Client, query: CallbackQuery):
     if query.data == "close_data":
@@ -665,13 +666,25 @@ async def manual_filters(client, message, text=False):
                 try:
                     if fileid == "None":
                         if btn == "[]":
-                            piroxrk = await client.send_message(
-                                group_id, 
-                                reply_text, 
-                                disable_web_page_preview=True,
-                                protect_content=settings["file_secure"], 
-                                reply_to_message_id=reply_id
-                            )
+                            try:
+                                piroxrk = await client.send_message(
+                                    group_id, 
+                                    reply_text, 
+                                    disable_web_page_preview=True,
+                                    protect_content=settings["file_secure"], 
+                                    reply_to_message_id=reply_id
+                                )
+                            except UserIsBlocked:
+                                logger.warning(f"User {group_id} has blocked the bot. Filter '{keyword}' not sent.")
+                                return True # Stop further processing for this filter match
+                            except InputUserDeactivated:
+                                logger.warning(f"User {group_id} is deactivated. Filter '{keyword}' not sent. Removing user.")
+                                await db.delete_user(group_id)
+                                return True # Stop further processing
+                            except Exception as e:
+                                logger.error(f"Error sending filter '{keyword}' to {group_id}: {e}", exc_info=True)
+                                return True # Stop further processing
+
                             if settings['auto_ffilter']:
                                 await auto_filter(client, message)
                                 if settings['auto_delete']:
@@ -682,14 +695,26 @@ async def manual_filters(client, message, text=False):
                                     await piroxrk.delete()
                         else:
                             button = eval(btn)
-                            piroxrk = await client.send_message(
-                                group_id,
-                                reply_text,
-                                disable_web_page_preview=True,
-                                reply_markup=InlineKeyboardMarkup(button),
-                                protect_content=settings["file_secure"], 
-                                reply_to_message_id=reply_id
-                            )
+                            try:
+                                piroxrk = await client.send_message(
+                                    group_id,
+                                    reply_text,
+                                    disable_web_page_preview=True,
+                                    reply_markup=InlineKeyboardMarkup(button),
+                                    protect_content=settings["file_secure"], 
+                                    reply_to_message_id=reply_id
+                                )
+                            except UserIsBlocked:
+                                logger.warning(f"User {group_id} has blocked the bot. Filter '{keyword}' not sent.")
+                                return True
+                            except InputUserDeactivated:
+                                logger.warning(f"User {group_id} is deactivated. Filter '{keyword}' not sent. Removing user.")
+                                await db.delete_user(group_id)
+                                return True
+                            except Exception as e:
+                                logger.error(f"Error sending filter '{keyword}' to {group_id}: {e}", exc_info=True)
+                                return True
+                            
                             if settings['auto_ffilter']:
                                 await auto_filter(client, message)
                                 if settings['auto_delete']:
@@ -699,13 +724,25 @@ async def manual_filters(client, message, text=False):
                                     await asyncio.sleep(info.AUTO_DELETE_MESSAGE_TIME)
                                     await piroxrk.delete()
                     elif btn == "[]":
-                        piroxrk = await client.send_cached_media(
-                            group_id,
-                            fileid,
-                            caption=reply_text or "",
-                            protect_content=settings["file_secure"], 
-                            reply_to_message_id=reply_id
-                        )
+                        try:
+                            piroxrk = await client.send_cached_media(
+                                group_id,
+                                fileid,
+                                caption=reply_text or "",
+                                protect_content=settings["file_secure"], 
+                                reply_to_message_id=reply_id
+                            )
+                        except UserIsBlocked:
+                            logger.warning(f"User {group_id} has blocked the bot. Filter '{keyword}' (media) not sent.")
+                            return True
+                        except InputUserDeactivated:
+                            logger.warning(f"User {group_id} is deactivated. Filter '{keyword}' (media) not sent. Removing user.")
+                            await db.delete_user(group_id)
+                            return True
+                        except Exception as e:
+                            logger.error(f"Error sending filter '{keyword}' (media) to {group_id}: {e}", exc_info=True)
+                            return True
+
                         if settings['auto_ffilter']:
                             await auto_filter(client, message)
                             if settings['auto_delete']:
@@ -767,12 +804,24 @@ async def global_filters(client, message, text=False):
                 try:
                     if fileid == "None":
                         if btn == "[]":
-                            piroxrk = await client.send_message(
-                                group_id, 
-                                reply_text, 
-                                disable_web_page_preview=True,
-                                reply_to_message_id=reply_id
-                            )
+                            try:
+                                piroxrk = await client.send_message(
+                                    group_id, 
+                                    reply_text, 
+                                    disable_web_page_preview=True,
+                                    reply_to_message_id=reply_id
+                                )
+                            except UserIsBlocked:
+                                logger.warning(f"User {group_id} has blocked the bot. Global filter '{keyword}' not sent.")
+                                return True
+                            except InputUserDeactivated:
+                                logger.warning(f"User {group_id} is deactivated. Global filter '{keyword}' not sent. Removing user.")
+                                await db.delete_user(group_id)
+                                return True
+                            except Exception as e:
+                                logger.error(f"Error sending global filter '{keyword}' to {group_id}: {e}", exc_info=True)
+                                return True
+                            
                             manual = await manual_filters(client, message)
                             if not manual:
                                 if settings['auto_ffilter']:
@@ -788,13 +837,25 @@ async def global_filters(client, message, text=False):
                                      await piroxrk.delete()
                         else:
                             button = eval(btn)
-                            piroxrk = await client.send_message(
-                                group_id,
-                                reply_text,
-                                disable_web_page_preview=True,
-                                reply_markup=InlineKeyboardMarkup(button),
-                                reply_to_message_id=reply_id
-                            )
+                            try:
+                                piroxrk = await client.send_message(
+                                    group_id,
+                                    reply_text,
+                                    disable_web_page_preview=True,
+                                    reply_markup=InlineKeyboardMarkup(button),
+                                    reply_to_message_id=reply_id
+                                )
+                            except UserIsBlocked:
+                                logger.warning(f"User {group_id} has blocked the bot. Global filter '{keyword}' not sent.")
+                                return True
+                            except InputUserDeactivated:
+                                logger.warning(f"User {group_id} is deactivated. Global filter '{keyword}' not sent. Removing user.")
+                                await db.delete_user(group_id)
+                                return True
+                            except Exception as e:
+                                logger.error(f"Error sending global filter '{keyword}' to {group_id}: {e}", exc_info=True)
+                                return True
+                                
                             manual = await manual_filters(client, message)
                             if not manual:
                                 if settings['auto_ffilter']:
@@ -810,12 +871,24 @@ async def global_filters(client, message, text=False):
                                      await piroxrk.delete()
 
                     elif btn == "[]":
-                        piroxrk = await client.send_cached_media(
-                            group_id,
-                            fileid,
-                            caption=reply_text or "",
-                            reply_to_message_id=reply_id
-                        )
+                        try:
+                            piroxrk = await client.send_cached_media(
+                                group_id,
+                                fileid,
+                                caption=reply_text or "",
+                                reply_to_message_id=reply_id
+                            )
+                        except UserIsBlocked:
+                            logger.warning(f"User {group_id} has blocked the bot. Global filter '{keyword}' (media) not sent.")
+                            return True
+                        except InputUserDeactivated:
+                            logger.warning(f"User {group_id} is deactivated. Global filter '{keyword}' (media) not sent. Removing user.")
+                            await db.delete_user(group_id)
+                            return True
+                        except Exception as e:
+                            logger.error(f"Error sending global filter '{keyword}' (media) to {group_id}: {e}", exc_info=True)
+                            return True
+
                         manual = await manual_filters(client, message)
                         if not manual:
                             if settings['auto_ffilter']:
@@ -1076,11 +1149,16 @@ async def handle_file_cb(client: Client, query: CallbackQuery):
                 reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ))
             await query.answer('𝖢𝗁𝖾𝖼𝗄 𝖯𝖬, 𝖨 𝗁𝖺𝗏𝖾 𝗌𝖾𝗇𝗍 𝖿𝗂𝗅𝖾𝗌 𝗂𝗇 𝖯𝖬', show_alert=True)
     except UserIsBlocked:
+        logger.warning(f"User {query.from_user.id} has blocked the bot. Cannot send file from file_cb.")
         await query.answer('𝖴𝗇𝖻𝗅𝗈𝖼𝗄 𝗍𝗁𝖾 𝖻𝗈𝗍 𝗆𝖺𝗇𝗁 !', show_alert=True)
+    except InputUserDeactivated:
+        logger.warning(f"User {query.from_user.id} is deactivated. Removing from DB. Cannot send file from file_cb.")
+        await db.delete_user(query.from_user.id)
+        await query.answer('Your account is deactivated.', show_alert=True)
     except PeerIdInvalid: 
         await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
     except Exception as e: 
-        logger.error(f"Error in cb_handler 'file': {e}", exc_info=True)
+        logger.error(f"Error in cb_handler 'file' for user {query.from_user.id}: {e}", exc_info=True)
         await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}") 
 
 async def handle_checksub_cb(client: Client, query: CallbackQuery):
@@ -1128,9 +1206,14 @@ async def handle_checksub_cb(client: Client, query: CallbackQuery):
             protect_content=True if ident == 'checksubp' else False, 
             reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ))
     except UserIsBlocked:
+        logger.warning(f"User {query.from_user.id} has blocked the bot. Cannot send file from checksub_cb.")
         await query.answer('𝖴𝗇𝖻𝗅𝗈𝖼𝗄 𝗍𝗁𝖾 𝖻𝗈𝗍 𝗆𝖺𝗇𝗁 !', show_alert=True)
+    except InputUserDeactivated:
+        logger.warning(f"User {query.from_user.id} is deactivated. Removing from DB. Cannot send file from checksub_cb.")
+        await db.delete_user(query.from_user.id)
+        await query.answer('Your account is deactivated.', show_alert=True)
     except Exception as e:
-        logger.error(f"Error in cb_handler 'checksub': {e}", exc_info=True)
+        logger.error(f"Error in cb_handler 'checksub' for user {query.from_user.id}: {e}", exc_info=True)
         await query.answer("An error occurred while sending the file.", show_alert=True)
 
 async def handle_pages_cb(client: Client, query: CallbackQuery):
@@ -1253,53 +1336,64 @@ async def handle_open_set_pm_cb(client: Client, query: CallbackQuery):
     reply_markup_group_msg = InlineKeyboardMarkup(btn2)
     await query.message.edit_text(f"<b>𝖸𝗈𝗎𝗋 𝗌𝖾𝗍𝗍𝗂𝗇𝗀𝗌 𝗆𝖾𝗇𝗎 𝖿𝗈𝗋 {title} 𝗁𝖺𝗌 𝖻𝖾𝖾𝗇 𝗌𝖾𝗇𝗍 𝗍𝗈 𝗒𝗈𝗎𝗋 𝖯𝖬</b>", reply_markup=reply_markup_group_msg) 
     
-    buttons_pm = [
-        [
-            InlineKeyboardButton('𝖥𝗂𝗅𝗍𝖾𝗋 𝖡𝗎𝗍𝗍𝗈𝗇', callback_data=f'setgs#button#{settings["button"]}#{str(grp_id)}'),
-            InlineKeyboardButton('𝖲𝗂𝗇𝗀𝗅𝖾 𝖡𝗎𝗍𝗍𝗈𝗇' if settings["button"] else '𝖣𝗈𝗎𝖻𝗅𝖾', callback_data=f'setgs#button#{settings["button"]}#{str(grp_id)}')
-        ],
-        [
-            InlineKeyboardButton('𝖥𝗂𝗅𝖾 𝖲𝖾𝗇𝖽 𝖬𝗈𝖽𝖾', callback_data=f'setgs#botpm#{settings["botpm"]}#{str(grp_id)}'),
-            InlineKeyboardButton('𝖬𝖺𝗇𝗎𝖺𝗅 𝖲𝗍𝖺𝗋𝗍' if settings["botpm"] else '𝖠𝗎𝗍𝗈 𝖲𝖾𝗇𝖽', callback_data=f'setgs#botpm#{settings["botpm"]}#{str(grp_id)}')
-        ],
-        [
-            InlineKeyboardButton('𝖯𝗋𝗈𝗍𝖾𝖼𝗍 𝖢𝗈𝗇𝗍𝖾𝗇𝗍', callback_data=f'setgs#file_secure#{settings["file_secure"]}#{str(grp_id)}'),
-            InlineKeyboardButton('✅ 𝖮𝗇' if settings["file_secure"] else '❌ 𝖮𝖿𝖿', callback_data=f'setgs#file_secure#{settings["file_secure"]}#{str(grp_id)}')
-        ],
-        [
-            InlineKeyboardButton('𝖨𝖬𝖣𝖻', callback_data=f'setgs#imdb#{settings["imdb"]}#{str(grp_id)}'),
-            InlineKeyboardButton('✅ 𝖮𝗇' if settings["imdb"] else '❌ 𝖮𝖿𝖿', callback_data=f'setgs#imdb#{settings["imdb"]}#{str(grp_id)}')
-        ],
-        [
-            InlineKeyboardButton('𝖲𝗉𝖾𝗅𝗅 𝖢𝗁𝖾𝖼𝗄', callback_data=f'setgs#spell_check#{settings["spell_check"]}#{str(grp_id)}'),
-            InlineKeyboardButton('✅ 𝖮𝗇' if settings["spell_check"] else '❌ 𝖮𝖿𝖿', callback_data=f'setgs#spell_check#{settings["spell_check"]}#{str(grp_id)}')
-        ],
-        [
-            InlineKeyboardButton('𝖶𝖾𝗅𝖼𝗈𝗆𝖾 𝖬𝖾𝗌𝗌𝖺𝗀𝖾', callback_data=f'setgs#welcome#{settings["welcome"]}#{str(grp_id)}'),
-            InlineKeyboardButton('✅ 𝖮𝗇' if settings["welcome"] else '❌ 𝖮𝖿𝖿', callback_data=f'setgs#welcome#{settings["welcome"]}#{str(grp_id)}')
-        ],
-        [
-            InlineKeyboardButton('𝖠𝗎𝗍𝗈 𝖣𝖾𝗅𝖾𝗍𝖾', callback_data=f'setgs#auto_delete#{settings["auto_delete"]}#{str(grp_id)}'),
-            InlineKeyboardButton('5 𝖬𝗂𝗇' if settings["auto_delete"] else '❌ 𝖮𝖿𝖿', callback_data=f'setgs#auto_delete#{settings["auto_delete"]}#{str(grp_id)}')
-        ],
-        [
-            InlineKeyboardButton('𝖠𝗎𝗍𝗈-𝖥𝗂𝗅𝗍𝖾𝗋', callback_data=f'setgs#auto_ffilter#{settings["auto_ffilter"]}#{str(grp_id)}'),
-            InlineKeyboardButton('✅ 𝖮𝗇' if settings["auto_ffilter"] else '❌ 𝖮𝖿𝖿', callback_data=f'setgs#auto_ffilter#{settings["auto_ffilter"]}#{str(grp_id)}')
-        ],
-        [
-            InlineKeyboardButton('𝖬𝖺𝗑 𝖡𝗎𝗍𝗍𝗈𝗇𝗌', callback_data=f'setgs#max_btn#{settings["max_btn"]}#{str(grp_id)}'),
-            InlineKeyboardButton('10' if settings["max_btn"] else f'{info.MAX_B_TN}', callback_data=f'setgs#max_btn#{settings["max_btn"]}#{str(grp_id)}')
+    try:
+        buttons_pm = [
+            [
+                InlineKeyboardButton('𝖥𝗂𝗅𝗍𝖾𝗋 𝖡𝗎𝗍𝗍𝗈𝗇', callback_data=f'setgs#button#{settings["button"]}#{str(grp_id)}'),
+                InlineKeyboardButton('𝖲𝗂𝗇𝗀𝗅𝖾 𝖡𝗎𝗍𝗍𝗈𝗇' if settings["button"] else '𝖣𝗈𝗎𝖻𝗅𝖾', callback_data=f'setgs#button#{settings["button"]}#{str(grp_id)}')
+            ],
+            [
+                InlineKeyboardButton('𝖥𝗂𝗅𝖾 𝖲𝖾𝗇𝖽 𝖬𝗈𝖽𝖾', callback_data=f'setgs#botpm#{settings["botpm"]}#{str(grp_id)}'),
+                InlineKeyboardButton('𝖬𝖺𝗇𝗎𝖺𝗅 𝖲𝗍𝖺𝗋𝗍' if settings["botpm"] else '𝖠𝗎𝗍𝗈 𝖲𝖾𝗇𝖽', callback_data=f'setgs#botpm#{settings["botpm"]}#{str(grp_id)}')
+            ],
+            [
+                InlineKeyboardButton('𝖯𝗋𝗈𝗍𝖾𝖼𝗍 𝖢𝗈𝗇𝗍𝖾𝗇𝗍', callback_data=f'setgs#file_secure#{settings["file_secure"]}#{str(grp_id)}'),
+                InlineKeyboardButton('✅ 𝖮𝗇' if settings["file_secure"] else '❌ 𝖮𝖿𝖿', callback_data=f'setgs#file_secure#{settings["file_secure"]}#{str(grp_id)}')
+            ],
+            [
+                InlineKeyboardButton('𝖨𝖬𝖣𝖻', callback_data=f'setgs#imdb#{settings["imdb"]}#{str(grp_id)}'),
+                InlineKeyboardButton('✅ 𝖮𝗇' if settings["imdb"] else '❌ 𝖮𝖿𝖿', callback_data=f'setgs#imdb#{settings["imdb"]}#{str(grp_id)}')
+            ],
+            [
+                InlineKeyboardButton('𝖲𝗉𝖾𝗅𝗅 𝖢𝗁𝖾𝖼𝗄', callback_data=f'setgs#spell_check#{settings["spell_check"]}#{str(grp_id)}'),
+                InlineKeyboardButton('✅ 𝖮𝗇' if settings["spell_check"] else '❌ 𝖮𝖿𝖿', callback_data=f'setgs#spell_check#{settings["spell_check"]}#{str(grp_id)}')
+            ],
+            [
+                InlineKeyboardButton('𝖶𝖾𝗅𝖼𝗈𝗆𝖾 𝖬𝖾𝗌𝗌𝖺𝗀𝖾', callback_data=f'setgs#welcome#{settings["welcome"]}#{str(grp_id)}'),
+                InlineKeyboardButton('✅ 𝖮𝗇' if settings["welcome"] else '❌ 𝖮𝖿𝖿', callback_data=f'setgs#welcome#{settings["welcome"]}#{str(grp_id)}')
+            ],
+            [
+                InlineKeyboardButton('𝖠𝗎𝗍𝗈 𝖣𝖾𝗅𝖾𝗍𝖾', callback_data=f'setgs#auto_delete#{settings["auto_delete"]}#{str(grp_id)}'),
+                InlineKeyboardButton('5 𝖬𝗂𝗇' if settings["auto_delete"] else '❌ 𝖮𝖿𝖿', callback_data=f'setgs#auto_delete#{settings["auto_delete"]}#{str(grp_id)}')
+            ],
+            [
+                InlineKeyboardButton('𝖠𝗎𝗍𝗈-𝖥𝗂𝗅𝗍𝖾𝗋', callback_data=f'setgs#auto_ffilter#{settings["auto_ffilter"]}#{str(grp_id)}'),
+                InlineKeyboardButton('✅ 𝖮𝗇' if settings["auto_ffilter"] else '❌ 𝖮𝖿𝖿', callback_data=f'setgs#auto_ffilter#{settings["auto_ffilter"]}#{str(grp_id)}')
+            ],
+            [
+                InlineKeyboardButton('𝖬𝖺𝗑 𝖡𝗎𝗍𝗍𝗈𝗇𝗌', callback_data=f'setgs#max_btn#{settings["max_btn"]}#{str(grp_id)}'),
+                InlineKeyboardButton('10' if settings["max_btn"] else f'{info.MAX_B_TN}', callback_data=f'setgs#max_btn#{settings["max_btn"]}#{str(grp_id)}')
+            ]
         ]
-    ]
-    reply_markup_pm = InlineKeyboardMarkup(buttons_pm)
-    await client.send_message(
-        chat_id=userid,
-        text=f"<b>𝖢𝗁𝖺𝗇𝗀𝖾 𝖸𝗈𝗎𝗋 𝖲𝖾𝗍𝗍𝗂𝗇𝗀𝗌 𝖥𝗈𝗋 {title} 𝖠𝗌 𝖸𝗈𝗎𝗋 𝖶𝗂𝗌𝗁</b>",
-        reply_markup=reply_markup_pm,
-        disable_web_page_preview=True,
-        parse_mode=enums.ParseMode.HTML,
-    )
-    await query.answer('Support Us By Sharing The Channel And Bot')
+        reply_markup_pm = InlineKeyboardMarkup(buttons_pm)
+        await client.send_message(
+            chat_id=userid,
+            text=f"<b>𝖢𝗁𝖺𝗇𝗀𝖾 𝖸𝗈𝗎𝗋 𝖲𝖾𝗍𝗍𝗂𝗇𝗀𝗌 𝖥𝗈𝗋 {title} 𝖠𝗌 𝖸𝗈𝗎𝗋 𝖶𝗂𝗌𝗁</b>",
+            reply_markup=reply_markup_pm,
+            disable_web_page_preview=True,
+            parse_mode=enums.ParseMode.HTML,
+        )
+        await query.answer('Support Us By Sharing The Channel And Bot')
+    except UserIsBlocked:
+        logger.warning(f"User {userid} has blocked the bot. Cannot send settings menu in PM.")
+        await query.answer("I can't send you the settings in PM because you've blocked me.", show_alert=True)
+    except InputUserDeactivated:
+        logger.warning(f"User {userid} is deactivated. Cannot send settings menu in PM. Removing user.")
+        await db.delete_user(int(userid)) # Ensure userid is int
+        await query.answer("Your account is deactivated.", show_alert=True)
+    except Exception as e:
+        logger.error(f"Error sending settings menu to {userid} in PM: {e}", exc_info=True)
+        await query.answer("An error occurred while trying to send the settings menu to your PM.", show_alert=True)
 
 async def handle_show_option_cb(client: Client, query: CallbackQuery):
     ident, from_user = query.data.split("#")
@@ -1333,7 +1427,14 @@ async def handle_unavailable_cb(client: Client, query: CallbackQuery):
         try:
             await client.send_message(chat_id=int(from_user), text=f"<b>𝖧𝖾𝗒 {user.mention}, 𝖲𝗈𝗋𝗋𝗒 𝗒𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 𝗂𝗌 𝗎𝗇𝖺𝗏𝖺𝗂𝗅𝖺𝖻𝗅𝖾. 𝖲𝗈 𝗆𝗈𝖽𝖾𝗋𝖺𝗍𝗈𝗋𝗌 𝖼𝖺𝗇'𝗍 𝖺𝖽𝖽 𝗂𝗍 !</b>", reply_markup=InlineKeyboardMarkup(btn2))
         except UserIsBlocked:
-            await client.send_message(chat_id=int(info.SUPPORT_CHAT_ID), text=f"<b>𝖧𝖾𝗒 {user.mention}, 𝖲𝗈𝗋𝗋𝗒 𝗒𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 𝗂𝗌 𝗎𝗇𝖺𝗏𝖺𝗂𝗅𝖺𝖻𝗅𝖾. 𝖲𝗈 𝗆𝗈𝖽𝖾𝗋𝖺𝗍𝗈𝗋𝗌 𝖼𝖺𝗇'𝗍 𝖺𝖽𝖽 𝗂𝗍 !\n\n📝 𝖭𝗈𝗍𝖾: 𝖳𝗁𝗂𝗌 𝗆𝖾𝗌𝗌𝖺𝗀𝖾 𝗂𝗌 𝗌𝖾𝗇𝗍 𝗂𝗇 𝖦𝗋𝗈𝗎𝗉 𝖻𝖾𝖼𝖺𝗎𝗌𝖾 𝗒𝗈𝗎 𝗁𝖺𝗏𝖾 𝖡𝗅𝗈𝖼𝗄𝖾𝖽 𝗍𝗁𝖾 𝖡𝗈𝗍 ! 𝖴𝗇𝖻𝗅𝗈𝖼𝗄 𝗍𝗁𝖾 𝖡𝗈𝗍 !</b>", reply_markup=InlineKeyboardMarkup(btn2))
+            logger.warning(f"User {from_user} has blocked the bot. Cannot send 'unavailable' status message.")
+            await client.send_message(chat_id=int(info.SUPPORT_CHAT_ID), text=f"<b>User {user.mention} (ID: {from_user}) was notified their request is unavailable, but they blocked the bot. (Original message in this group)</b>", reply_markup=InlineKeyboardMarkup(btn2))
+        except InputUserDeactivated:
+            logger.warning(f"User {from_user} is deactivated. Cannot send 'unavailable' status. Removing user.")
+            await db.delete_user(int(from_user))
+            await client.send_message(chat_id=int(info.SUPPORT_CHAT_ID), text=f"<b>User {user.mention} (ID: {from_user}) is deactivated. Their request was marked unavailable. (Original message in this group)</b>", reply_markup=InlineKeyboardMarkup(btn2))
+        except Exception as e:
+            logger.error(f"Error sending 'unavailable' status to {from_user}: {e}", exc_info=True)
     else:
         await query.answer("𝖸𝗈𝗎 𝖽𝗈𝗇'𝗍 𝗁𝖺𝗏𝖾 𝗌𝗎𝖿𝖿𝗂𝖼𝗂𝖾𝗇𝗍 𝗋𝗂𝗀𝗁𝗍𝗌 𝗍𝗈 𝖽𝗈 𝗍𝗁𝗂𝗌 !", show_alert=True)
     
@@ -1354,7 +1455,14 @@ async def handle_uploaded_cb(client: Client, query: CallbackQuery):
         try:
             await client.send_message(chat_id=int(from_user), text=f"<b>𝖧𝖾𝗒 {user.mention}, 𝖸𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 𝗁𝖺𝗌 𝖻𝖾𝖾𝗇 𝗎𝗉𝗅𝗈𝖺𝖽𝖾𝖽 𝖻𝗒 𝗆𝗈𝖽𝖾𝗋𝖺𝗍𝗈𝗋. 𝖪𝗂𝗇𝖽𝗅𝗒 𝗌𝖾𝖺𝗋𝖼𝗁 𝖺𝗀𝖺𝗂𝗇 @kdramasmirrorchat !</b>", reply_markup=InlineKeyboardMarkup(btn2))
         except UserIsBlocked:
-            await client.send_message(chat_id=int(info.SUPPORT_CHAT_ID), text=f"<b>𝖧𝖾𝗒 {user.mention}, 𝖸𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 𝗁𝖺𝗌 𝖻𝖾𝖾𝗇 𝗎𝗉𝗅𝗈𝖺𝖽𝖾𝖽 𝖻𝗒 𝗆𝗈𝖽𝖾𝗋𝖺𝗍𝗈𝗋. 𝖪𝗂𝗇𝖽𝗅𝗒 𝗌𝖾𝖺𝗋𝖼𝗁 𝖺𝗀𝖺𝗂𝗇 @kdramasmirrorchat !\n\n📝 𝖭𝗈𝗍𝖾: 𝖳𝗁𝗂𝗌 𝗆𝖾𝗌𝗌𝖺𝗀𝖾 𝗂𝗌 𝗌𝖾𝗇𝗍 𝗂𝗇 𝖦𝗋𝗈𝗎𝗉 𝖻𝖾𝖼𝖺𝗎𝗌𝖾 𝗒𝗈𝗎 𝗁𝖺𝗏𝖾 𝖡𝗅𝗈𝖼𝗄𝖾𝖽 𝗍𝗁𝖾 𝖡𝗈𝗍 ! 𝖴𝗇𝖻𝗅𝗈𝖼𝗄 𝗍𝗁𝖾 𝖡𝗈𝗍 !</b>", reply_markup=InlineKeyboardMarkup(btn2))
+            logger.warning(f"User {from_user} has blocked the bot. Cannot send 'uploaded' status message.")
+            await client.send_message(chat_id=int(info.SUPPORT_CHAT_ID), text=f"<b>User {user.mention} (ID: {from_user}) was notified their request was uploaded, but they blocked the bot. (Original message in this group)</b>", reply_markup=InlineKeyboardMarkup(btn2))
+        except InputUserDeactivated:
+            logger.warning(f"User {from_user} is deactivated. Cannot send 'uploaded' status. Removing user.")
+            await db.delete_user(int(from_user))
+            await client.send_message(chat_id=int(info.SUPPORT_CHAT_ID), text=f"<b>User {user.mention} (ID: {from_user}) is deactivated. Their request was marked uploaded. (Original message in this group)</b>", reply_markup=InlineKeyboardMarkup(btn2))
+        except Exception as e:
+            logger.error(f"Error sending 'uploaded' status to {from_user}: {e}", exc_info=True)
     else:
         await query.answer("𝖸𝗈𝗎 𝖽𝗈𝗇'𝗍 𝗁𝖺𝗏𝖾 𝗌𝗎𝖿𝖿𝗂𝖼𝗂𝖾𝗇𝗍 𝗋𝗂𝗀𝗁𝗍𝗌 𝗍𝗈 𝖽𝗈 𝗍𝗁𝗂𝗌 !", show_alert=True)
 
@@ -1375,7 +1483,14 @@ async def handle_already_available_cb(client: Client, query: CallbackQuery):
         try:
             await client.send_message(chat_id=int(from_user), text=f"<b>𝖧𝖾𝗒 {user.mention}, 𝖸𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 𝗂𝗌 𝖺𝗅𝗋𝖾𝖺𝖽𝗒 𝖺𝗏𝖺𝗂𝗅𝖺𝖻𝗅𝖾 𝗈𝗇 𝖡𝗈𝗍. 𝖪𝗂𝗇𝖽𝗅𝗒 𝗌𝖾𝖺𝗋𝖼𝗁 𝖺𝗀𝖺𝗂𝗇 @kdramasmirrorchat !</b>", reply_markup=InlineKeyboardMarkup(btn2))
         except UserIsBlocked:
-            await client.send_message(chat_id=int(info.SUPPORT_CHAT_ID), text=f"<b>𝖧𝖾𝗒 {user.mention}, 𝖸𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 𝗂𝗌 𝖺𝗅𝗋𝖾𝖺𝖽𝗒 𝖺𝗏𝖺𝗂𝗅𝖺𝖻𝗅𝖾 𝗈𝗇 𝖡𝗈𝗍. 𝖪𝗂𝗇𝖽𝗅𝗒 𝗌𝖾𝖺𝗋𝖼𝗁 𝖺𝗀𝖺𝗂𝗇 @kdramasmirrorchat !\n\n📝 𝖭𝗈𝗍𝖾: 𝖳𝗁𝗂𝗌 𝗆𝖾𝗌𝗌𝖺𝗀𝖾 𝗂𝗌 𝗌𝖾𝗇𝗍 𝗂𝗇 𝖦𝗋𝗈𝗎𝗉 𝖻𝖾𝖼𝖺𝗎𝗌𝖾 𝗒𝗈𝗎 𝗁𝖺𝗏𝖾 𝖡𝗅𝗈𝖼𝗄𝖾𝖽 𝗍𝗁𝖾 𝖡𝗈𝗍 ! 𝖴𝗇𝖻𝗅𝗈𝖼𝗄 𝗍𝗁𝖾 𝖡𝗈𝗍 !</b>", reply_markup=InlineKeyboardMarkup(btn2))
+            logger.warning(f"User {from_user} has blocked the bot. Cannot send 'already_available' status message.")
+            await client.send_message(chat_id=int(info.SUPPORT_CHAT_ID), text=f"<b>User {user.mention} (ID: {from_user}) was notified their request is already available, but they blocked the bot. (Original message in this group)</b>", reply_markup=InlineKeyboardMarkup(btn2))
+        except InputUserDeactivated:
+            logger.warning(f"User {from_user} is deactivated. Cannot send 'already_available' status. Removing user.")
+            await db.delete_user(int(from_user))
+            await client.send_message(chat_id=int(info.SUPPORT_CHAT_ID), text=f"<b>User {user.mention} (ID: {from_user}) is deactivated. Their request was marked already available. (Original message in this group)</b>", reply_markup=InlineKeyboardMarkup(btn2))
+        except Exception as e:
+            logger.error(f"Error sending 'already_available' status to {from_user}: {e}", exc_info=True)
     else:
         await query.answer("𝖸𝗈𝗎 𝖽𝗈𝗇'𝗍 𝗁𝖺𝗏𝖾 𝗌𝗎𝖿𝖿𝗂𝖼𝗂𝖾𝗇𝗍 𝗋𝗂𝗀𝗁𝗍𝗌 𝗍𝗈 𝖽𝗈 𝗍𝗁𝗂𝗌 !", show_alert=True)
 

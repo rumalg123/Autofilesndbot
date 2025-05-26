@@ -20,8 +20,15 @@ disabled_group=filters.create(disabled_chat)
 
 @Client.on_message(filters.private & banned_user & filters.incoming)
 async def ban_reply(bot, message):
-    ban = await db.get_ban_status(message.from_user.id)
-    await message.reply(f'<b>Sorry Dude, You are Banned to use Me.</b> \nBan Reason: {ban["ban_reason"]}')
+    user_id = message.from_user.id
+    ban_status = await db.get_ban_status(user_id) # Renamed ban to ban_status for clarity
+    try:
+        await message.reply(f'<b>Sorry Dude, You are Banned to use Me.</b> \nBan Reason: {ban_status["ban_reason"]}')
+    except InputUserDeactivated:
+        logging.warning(f"User {user_id} (banned) is deactivated. Removing from DB.")
+        await db.delete_user(user_id)
+    except Exception as e:
+        logging.error(f"Error sending ban reply to {user_id}: {e}", exc_info=True)
 
 @Client.on_message(filters.group & disabled_group & filters.incoming)
 async def grp_bd(bot, message):

@@ -6,7 +6,7 @@ import sys
 
 from Script import script
 from pyrogram import Client, filters, enums
-from pyrogram.errors import ChatAdminRequired, FloodWait, UserIsBlocked
+from pyrogram.errors import ChatAdminRequired, FloodWait, UserIsBlocked, InputUserDeactivated
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram.errors.exceptions.bad_request_400 import ChannelInvalid, UsernameInvalid, UsernameNotModified
 from pyrogram.types import Message
@@ -15,7 +15,7 @@ from database.users_chats_db import db
 import info
 from info import PREMIUM_DURATION_DAYS, NON_PREMIUM_DAILY_LIMIT 
 # Updated utils import
-from utils import get_settings, get_size, is_subscribed, save_group_settings, temp, check_user_access, get_file_id, is_chat_admin_or_bot_admin, generate_file_caption # Added generate_file_caption
+from utils import get_settings, get_size, is_subscribed, save_group_settings, temp, check_user_access, get_file_id, is_chat_admin_or_bot_admin, generate_file_caption, send_message_to_user # Added generate_file_caption
 from database.connections_mdb import active_connection
 import re
 import json
@@ -99,9 +99,7 @@ async def add_premium_command(client, message):
     except Exception as e:
         logger.error(f"Error sending log message for addpremium: {e}", exc_info=True)
 
-    try:
-        await client.send_message(user_id_to_add, "Congratulations! You have been upgraded to premium status.")
-    except Exception:
+    if not await send_message_to_user(client, user_id_to_add, "Congratulations! You have been upgraded to premium status."):
         await message.reply_text(
             f"Could not notify user {user_mention} directly (they might have blocked the bot or not started a chat).")
 
@@ -144,9 +142,7 @@ async def remove_premium_command(client, message):
     except Exception as e:
         logger.error(f"Error sending log message for removepremium: {e}", exc_info=True)
 
-    try:
-        await client.send_message(user_id_to_remove, "Your premium status has been removed.")
-    except Exception:
+    if not await send_message_to_user(client, user_id_to_remove, "Your premium status has been removed."):
         await message.reply_text(f"Could not notify user {user_mention} directly.")
 
 
@@ -345,12 +341,20 @@ async def handle_start_force_subscribe(client: Client, message: Message, user_id
         except (IndexError, ValueError):
             btn.append([InlineKeyboardButton("⟳ 𝖳𝗋𝗒 𝖠𝗀𝖺𝗂𝗇 ⟳",
                                              url=f"https://t.me/{temp.U_NAME}?start={data}")])
-    await client.send_message(
-        chat_id=user_id,
-        text="**Please Join My Updates Channel to use this Bot!**",
-        reply_markup=InlineKeyboardMarkup(btn),
-        parse_mode=enums.ParseMode.MARKDOWN
-    )
+    try:
+        await client.send_message(
+            chat_id=user_id,
+            text="**Please Join My Updates Channel to use this Bot!**",
+            reply_markup=InlineKeyboardMarkup(btn),
+            parse_mode=enums.ParseMode.MARKDOWN
+        )
+    except UserIsBlocked:
+        logger.warning(f"User {user_id} has blocked the bot. Cannot send force subscribe message.")
+    except InputUserDeactivated:
+        logger.warning(f"User {user_id} is deactivated. Removing from DB.")
+        await db.delete_user(user_id)
+    except Exception as e:
+        logger.error(f"Error sending force subscribe message to {user_id}: {e}", exc_info=True)
 
 
 async def handle_start_send_all(client: Client, message: Message, user_id: int, data: str):
@@ -375,16 +379,25 @@ async def handle_start_send_all(client: Client, message: Message, user_id: int, 
         size = get_size(file_item.file_size)
         original_caption = file_item.caption 
         f_caption = generate_file_caption(original_caption, title, size, is_batch=False)
-
-        await client.send_cached_media(
-            chat_id=user_id,
-            file_id=file_item.file_id,
-            caption=f_caption,
-            protect_content=True if pre_type == 'filep' else False,
-            parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION or info.CUSTOM_FILE_CAPTION else enums.ParseMode.DEFAULT,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL)],
-                                               [InlineKeyboardButton("🍺 Buy Me A Beer", url="https://buymeacoffee.com/matthewmurdock001")]])
-        )
+        try:
+            await client.send_cached_media(
+                chat_id=user_id,
+                file_id=file_item.file_id,
+                caption=f_caption,
+                protect_content=True if pre_type == 'filep' else False,
+                parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION or info.CUSTOM_FILE_CAPTION else enums.ParseMode.DEFAULT,
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL)],
+                                                   [InlineKeyboardButton("🍺 Buy Me A Beer", url="https://buymeacoffee.com/matthewmurdock001")]])
+            )
+        except UserIsBlocked:
+            logger.warning(f"User {user_id} blocked the bot during send_all for file {file_item.file_id}.")
+            break # Stop sending more files to this user
+        except InputUserDeactivated:
+            logger.warning(f"User {user_id} is deactivated. Removing from DB. Aborting send_all.")
+            await db.delete_user(user_id)
+            break # Stop sending more files
+        except Exception as e:
+            logger.error(f"Error sending file {file_item.file_id} to {user_id} in send_all: {e}", exc_info=True)
         await asyncio.sleep(1) 
 
 async def handle_start_batch(client: Client, message: Message, user_id: int, data: str):
@@ -451,21 +464,35 @@ async def handle_start_batch(client: Client, message: Message, user_id: int, dat
             )
         except FloodWait as e_flood: 
             await asyncio.sleep(e_flood.x) 
-            logger.warning(f"Floodwait of {e_flood.x} sec.")
-            await client.send_cached_media(
-                chat_id=user_id,
-                file_id=msg_item_data.get("file_id"),
-                caption=f_caption,
-                parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION or info.BATCH_FILE_CAPTION else enums.ParseMode.DEFAULT,
-                protect_content=msg_item_data.get('protect', False),
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL)],
-                                                  [InlineKeyboardButton("🍺 Buy Me A Beer", url="https://buymeacoffee.com/matthewmurdock001")]])
-            )
+            logger.warning(f"Floodwait of {e_flood.x} sec. Retrying send for batch file {msg_item_data.get('file_id')} to {user_id}.")
+            try:
+                await client.send_cached_media(
+                    chat_id=user_id,
+                    file_id=msg_item_data.get("file_id"),
+                    caption=f_caption,
+                    parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION or info.BATCH_FILE_CAPTION else enums.ParseMode.DEFAULT,
+                    protect_content=msg_item_data.get('protect', False),
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL)],
+                                                      [InlineKeyboardButton("🍺 Buy Me A Beer", url="https://buymeacoffee.com/matthewmurdock001")]])
+                )
+            except Exception as e_retry:
+                logger.error(f"Error sending batch file {msg_item_data.get('file_id')} to {user_id} after floodwait: {e_retry}", exc_info=True)
+                continue # Skip this file
+        except UserIsBlocked:
+            logger.warning(f"User {user_id} blocked the bot during batch send for file {msg_item_data.get('file_id')}.")
+            break # Stop sending more files to this user
+        except InputUserDeactivated:
+            logger.warning(f"User {user_id} is deactivated. Removing from DB. Aborting batch send.")
+            await db.delete_user(user_id)
+            break # Stop sending more files
         except Exception as e_gen: 
-            logger.warning(e_gen, exc_info=True)
-            continue
+            logger.error(f"Error sending batch file {msg_item_data.get('file_id')} to {user_id}: {e_gen}", exc_info=True)
+            continue # Skip this file
         await asyncio.sleep(1)
-    await sts.delete()
+    try:
+        await sts.delete()
+    except Exception:
+        pass # Ignore if status message deletion fails
 
 async def handle_start_dstore(client: Client, message: Message, user_id: int, data: str):
     sts = await message.reply("<b>Processing stored files...</b>")
@@ -504,24 +531,51 @@ async def handle_start_dstore(client: Client, message: Message, user_id: int, da
             try:
                 await dstore_msg_item_loop.copy(user_id, caption=f_caption, protect_content=True if protect_str == "/pbatch" else False)
             except FloodWait as e_flood_dstore: 
-                await asyncio.sleep(e_flood_dstore.x) 
-                await dstore_msg_item_loop.copy(user_id, caption=f_caption, protect_content=True if protect_str == "/pbatch" else False)
+                await asyncio.sleep(e_flood_dstore.x)
+                logger.warning(f"Floodwait of {e_flood_dstore.x} sec. Retrying copy for dstore message {dstore_msg_item_loop.id} to {user_id}.")
+                try:
+                    await dstore_msg_item_loop.copy(user_id, caption=f_caption, protect_content=True if protect_str == "/pbatch" else False)
+                except Exception as e_retry_dstore:
+                    logger.error(f"Error copying dstore message {dstore_msg_item_loop.id} to {user_id} after floodwait: {e_retry_dstore}", exc_info=True)
+                    continue # Skip this message
+            except UserIsBlocked:
+                logger.warning(f"User {user_id} blocked the bot during dstore copy for message {dstore_msg_item_loop.id}.")
+                break # Stop processing for this user
+            except InputUserDeactivated:
+                logger.warning(f"User {user_id} is deactivated. Removing from DB. Aborting dstore copy.")
+                await db.delete_user(user_id)
+                break # Stop processing
             except Exception as e_dstore: 
-                logger.exception(e_dstore)
-                continue
+                logger.error(f"Error copying dstore message {dstore_msg_item_loop.id} to {user_id}: {e_dstore}", exc_info=True)
+                continue # Skip this message
         elif dstore_msg_item_loop.empty:
             continue
-        else: 
+        else: # Non-media message (e.g., text)
             try:
                 await dstore_msg_item_loop.copy(user_id, protect_content=True if protect_str == "/pbatch" else False)
             except FloodWait as e_flood_non_media: 
-                await asyncio.sleep(e_flood_non_media.x) 
-                await dstore_msg_item_loop.copy(user_id, protect_content=True if protect_str == "/pbatch" else False)
+                await asyncio.sleep(e_flood_non_media.x)
+                logger.warning(f"Floodwait of {e_flood_non_media.x} sec. Retrying copy for dstore text message {dstore_msg_item_loop.id} to {user_id}.")
+                try:
+                    await dstore_msg_item_loop.copy(user_id, protect_content=True if protect_str == "/pbatch" else False)
+                except Exception as e_retry_non_media:
+                    logger.error(f"Error copying dstore text message {dstore_msg_item_loop.id} to {user_id} after floodwait: {e_retry_non_media}", exc_info=True)
+                    continue # Skip this message
+            except UserIsBlocked:
+                logger.warning(f"User {user_id} blocked the bot during dstore copy for text message {dstore_msg_item_loop.id}.")
+                break # Stop processing for this user
+            except InputUserDeactivated:
+                logger.warning(f"User {user_id} is deactivated. Removing from DB. Aborting dstore copy for text message.")
+                await db.delete_user(user_id)
+                break # Stop processing
             except Exception as e_non_media: 
-                logger.exception(e_non_media)
-                continue
+                logger.error(f"Error copying dstore text message {dstore_msg_item_loop.id} to {user_id}: {e_non_media}", exc_info=True)
+                continue # Skip this message
         await asyncio.sleep(1)
-    await sts.delete()
+    try:
+        await sts.delete()
+    except Exception:
+        pass # Ignore if status message deletion fails
 
 async def handle_start_single_file(client: Client, message: Message, user_id: int, data: str, pre_param: str, file_id_param: str): 
     actual_file_id_to_send = None 
@@ -583,16 +637,23 @@ async def handle_start_single_file(client: Client, message: Message, user_id: in
     if f_caption is None: # Default caption if still None
         f_caption = title or ''
 
-
-    await client.send_cached_media(
-        chat_id=user_id,
-        file_id=actual_file_id_to_send,
-        caption=f_caption,
-        parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION or info.CUSTOM_FILE_CAPTION else enums.ParseMode.DEFAULT,
-        protect_content=True if actual_pre_to_send == 'filep' else False,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL)],
-                                           [InlineKeyboardButton("🍺 Buy Me A Beer", url="https://buymeacoffee.com/matthewmurdock001")]])
-    )
+    try:
+        await client.send_cached_media(
+            chat_id=user_id,
+            file_id=actual_file_id_to_send,
+            caption=f_caption,
+            parse_mode=enums.ParseMode.HTML if info.KEEP_ORIGINAL_CAPTION or info.CUSTOM_FILE_CAPTION else enums.ParseMode.DEFAULT,
+            protect_content=True if actual_pre_to_send == 'filep' else False,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL)],
+                                               [InlineKeyboardButton("🍺 Buy Me A Beer", url="https://buymeacoffee.com/matthewmurdock001")]])
+        )
+    except UserIsBlocked:
+        logger.warning(f"User {user_id} blocked the bot. Cannot send single file {actual_file_id_to_send}.")
+    except InputUserDeactivated:
+        logger.warning(f"User {user_id} is deactivated. Removing from DB. Cannot send single file {actual_file_id_to_send}.")
+        await db.delete_user(user_id)
+    except Exception as e:
+        logger.error(f"Error sending single file {actual_file_id_to_send} to {user_id}: {e}", exc_info=True)
 
 
 @Client.on_message(filters.command("start") & filters.incoming)
@@ -625,15 +686,23 @@ async def start(client, message):
     # If user is new, general_user_updater (via db.update_user_info_if_changed) adds them.
     # The old db.add_user call here is redundant if general_user_updater works as intended.
     # However, let's keep a failsafe for now, but use the 3-arg add_user.
-    if message.from_user and not await db.is_user_exist(message.from_user.id):
-        # This might be redundant if general_user_updater has already run and added the user.
-        # db.update_user_info_if_changed handles new user addition.
-        # For safety, ensuring user exists:
-        await db.add_user(message.from_user.id, message.from_user.first_name or "User", message.from_user.username)
-        await client.send_message(info.LOG_CHANNEL,
-                                  script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
+    if message.from_user: # Ensure message.from_user exists
+        user_id = message.from_user.id
+        if not await db.is_user_exist(user_id):
+            # This might be redundant if general_user_updater has already run and added the user.
+            # db.update_user_info_if_changed handles new user addition.
+            # For safety, ensuring user exists:
+            await db.add_user(user_id, message.from_user.first_name or "User", message.from_user.username)
+            try:
+                await client.send_message(info.LOG_CHANNEL,
+                                          script.LOG_TEXT_P.format(user_id, message.from_user.mention))
+            except Exception as e:
+                logger.error(f"Error sending new user log to LOG_CHANNEL for user {user_id}: {e}", exc_info=True)
+    else: # Should not happen for typical user commands, but good to handle
+        logger.warning("Start command received without message.from_user context.")
+        return
 
-    user_id = message.from_user.id
+    user_id = message.from_user.id # Re-assign for clarity, though already set if from_user exists
 
     if len(message.command) == 1: 
         await handle_start_no_args(client, message, user_id)
@@ -885,11 +954,23 @@ async def send_msg_user(bot, message):
         target_id_str = message.command[1]
         try:
             user = await bot.get_users(target_id_str) 
-            await message.reply_to_message.copy(int(user.id)) 
+            target_user_id = int(user.id)
+            await message.reply_to_message.copy(target_user_id) 
             await message.reply_text(f"<b>Your message has been successfully sent to {user.mention}.</b>")
         except UserIsBlocked:
-             await message.reply_text("<b>User has blocked the bot.</b>")
+            logger.warning(f"User {target_id_str} has blocked the bot. Cannot use /send.") # target_id_str might be username
+            await message.reply_text("<b>User has blocked the bot.</b>")
+        except InputUserDeactivated:
+            logger.warning(f"User {target_id_str} is deactivated. Removing from DB. Cannot use /send.") # target_id_str might be username
+            # Attempt to get numeric ID if possible for db.delete_user
+            try:
+                numeric_user_id = int(target_id_str)
+                await db.delete_user(numeric_user_id)
+            except ValueError: # If target_id_str was a username, we might not have the numeric ID here
+                logger.warning(f"Cannot remove user {target_id_str} by username alone on InputUserDeactivated in /send.")
+            await message.reply_text("<b>User is deactivated. If a numeric ID was provided, they have been removed from the database.</b>")
         except Exception as e:
+            logger.error(f"Error in /send command to {target_id_str}: {e}", exc_info=True)
             await message.reply_text(f"<b>Error: {e}</b>")
     else:
         await message.reply_text(
@@ -902,11 +983,22 @@ async def usend_msg(bot, message):
         target_id_str = message.command[1]
         try:
             user = await bot.get_users(target_id_str)
-            await message.reply_to_message.copy(int(user.id))
+            target_user_id = int(user.id)
+            await message.reply_to_message.copy(target_user_id)
             await message.reply_text(f"<b>𝖸𝗈𝗎𝗋 𝖬𝖾𝗌𝗌𝖺𝗀𝖾 𝖧𝖺𝗌 𝖲𝗎𝖼𝖼𝖾𝗌𝗌𝖿𝗎𝗅𝗅𝗒 𝖲𝖾𝗇𝗍 𝖳𝗈 {user.mention}.</b>")
         except UserIsBlocked:
-             await message.reply_text("<b>User has blocked the bot.</b>")
+            logger.warning(f"User {target_id_str} has blocked the bot. Cannot use /usend.") # target_id_str might be username
+            await message.reply_text("<b>User has blocked the bot.</b>")
+        except InputUserDeactivated:
+            logger.warning(f"User {target_id_str} is deactivated. Removing from DB. Cannot use /usend.") # target_id_str might be username
+            try:
+                numeric_user_id = int(target_id_str)
+                await db.delete_user(numeric_user_id)
+            except ValueError:
+                logger.warning(f"Cannot remove user {target_id_str} by username alone on InputUserDeactivated in /usend.")
+            await message.reply_text("<b>User is deactivated. If a numeric ID was provided, they have been removed from the database.</b>")
         except Exception as e:
+            logger.error(f"Error in /usend command to {target_id_str}: {e}", exc_info=True)
             await message.reply_text(f"<b>Error :- <code>{e}</code></b>")
     else:
         await message.reply_text("<b>Error: Command Incomplete! Reply to a message and specify user_id or @username.</b>")

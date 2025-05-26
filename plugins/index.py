@@ -8,7 +8,7 @@ from pyrogram.errors.exceptions.bad_request_400 import ChannelInvalid, ChatAdmin
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from database.ia_filterdb import save_file
-from utils import temp
+from utils import temp, send_message_to_user # Added send_message_to_user
 import info
 
 logger = logging.getLogger(__name__)
@@ -35,9 +35,9 @@ async def index_files(client, query): # Renamed bot to client
     if action == 'reject':
         logger.info(f"Indexing request for chat {chat_to_index_id_str} from user {requester_user_id} rejected by {query.from_user.id}.") # Added logging
         await query.message.delete()
-        await client.send_message(requester_user_id, # Use int version of ID
-                               f'Your Submission for indexing {chat_to_index_id_str} has been declined by our moderators.',
-                               reply_to_message_id=start_message_id) # Use int version of ID
+        await send_message_to_user(client, requester_user_id,
+                                   f'Your Submission for indexing {chat_to_index_id_str} has been declined by our moderators.',
+                                   reply_to_message_id=start_message_id)
         return
 
     if lock.locked():
@@ -47,9 +47,9 @@ async def index_files(client, query): # Renamed bot to client
 
     await query.answer('Processing...⏳', show_alert=True)
     if requester_user_id not in info.ADMINS: # Check if original requester is admin
-        await client.send_message(requester_user_id,
-                               f'Your Submission for indexing {chat_to_index_id_str} has been accepted by our moderators and will be added soon.',
-                               reply_to_message_id=start_message_id)
+        await send_message_to_user(client, requester_user_id,
+                                   f'Your Submission for indexing {chat_to_index_id_str} has been accepted by our moderators and will be added soon.',
+                                   reply_to_message_id=start_message_id)
     
     await status_update_message.edit(
         "Starting Indexing",

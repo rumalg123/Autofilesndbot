@@ -489,8 +489,11 @@ async def check_user_access(client, message, user_id, *, increment: bool = False
                         )
                     except UserIsBlocked:
                         logger.warning(f"User {user_id} has blocked the bot. Could not send premium expiry PM.")
+                    except InputUserDeactivated:
+                        logger.warning(f"User {user_id} is deactivated. Removing from DB. Could not send premium expiry PM.")
+                        await db.delete_user(user_id)
                     except Exception as e:
-                        logger.error(f"Failed to send premium expiry PM to {user_id}: {e}")
+                        logger.error(f"Failed to send premium expiry PM to {user_id}: {e}", exc_info=True)
                     # Fall through to non-premium checks for the current request
                 else:
                     return True, "Premium access"  # Active premium
@@ -612,9 +615,8 @@ async def send_message_to_user(client, user_id: int, text: str, reply_markup=Non
     except UserIsBlocked:
         logger.warning(f"User {user_id} has blocked the bot. Could not send message.")
     except InputUserDeactivated:
-        logger.warning(f"User {user_id} is deactivated. Could not send message.")
-        # Consider deleting user from DB here if appropriate for the bot's logic
-        # await db.delete_user(user_id) 
+        logger.warning(f"User {user_id} is deactivated. Removing from DB. Could not send message.")
+        await db.delete_user(user_id) 
     except PeerIdInvalid:
         logger.warning(f"User ID {user_id} is invalid (PeerIdInvalid). Could not send message.")
     except Exception as e:
@@ -641,13 +643,24 @@ async def send_all(bot, userid, files, ident):
                 f_caption = f_caption
         if f_caption is None:
             f_caption = f"{title}"
-        await bot.send_cached_media(
-            chat_id=userid,
-            file_id=file.file_id,
-            caption=f_caption,
-            parse_mode=enums.ParseMode.HTML,
-            protect_content=True if ident == "filep" else False,
-            reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⚔️ Main Channel ⚔️', url="https://t.me/kdramaworld_ongoing") ] ] ))
+        try:
+            await bot.send_cached_media(
+                chat_id=userid,
+                file_id=file.file_id,
+                caption=f_caption,
+                parse_mode=enums.ParseMode.HTML,
+                protect_content=True if ident == "filep" else False,
+                reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⚔️ Main Channel ⚔️', url="https://t.me/kdramaworld_ongoing") ] ] ))
+        except UserIsBlocked:
+            logger.warning(f"User {userid} blocked the bot during send_all for file {file.file_id}.")
+            break # Stop sending more files to this user
+        except InputUserDeactivated:
+            logger.warning(f"User {userid} is deactivated. Removing from DB. Aborting send_all for file {file.file_id}.")
+            await db.delete_user(userid)
+            break # Stop sending more files
+        except Exception as e:
+            logger.error(f"Error sending file {file.file_id} to {userid} in send_all: {e}", exc_info=True)
+            # Optionally, continue to the next file or break based on error type
 
 
 

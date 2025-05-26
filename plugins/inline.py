@@ -73,8 +73,13 @@ async def answer(bot, query):
                     await db.update_premium_status(user_id, False)
                     try:
                         await bot.send_message(user_id, "Your premium subscription has expired. You are now on the free plan.")
+                    except UserIsBlocked:
+                        logger.warning(f"User {user_id} has blocked the bot. Cannot send premium expiry message.")
+                    except InputUserDeactivated:
+                        logger.warning(f"User {user_id} is deactivated. Removing from DB. Cannot send premium expiry message.")
+                        await db.delete_user(user_id)
                     except Exception as e:
-                        logger.warning(f"Could not send premium expiry message to {user_id}: {e}")
+                        logger.error(f"Error sending premium expiry message to {user_id}: {e}", exc_info=True)
                 else:
                     can_proceed_with_query = True 
             else: 

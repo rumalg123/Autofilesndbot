@@ -69,11 +69,22 @@ async def addconnection(client, message):
                     parse_mode=enums.ParseMode.MARKDOWN
                 )
                 if chat_type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
-                    await client.send_message(
-                        user_id,
-                        f"Connected to **{title}**!",
-                        parse_mode=enums.ParseMode.MARKDOWN
-                    )
+                    try:
+                        await client.send_message(
+                            user_id,
+                            f"Connected to **{title}**!",
+                            parse_mode=enums.ParseMode.MARKDOWN
+                        )
+                    except UserIsBlocked:
+                        logger.warning(f"User {user_id} has blocked the bot. Cannot send PM confirmation for connection to {title}.")
+                        await message.reply_text(f"Successfully connected to **{title}**, but I couldn't send you a PM confirmation because you've blocked me.")
+                    except InputUserDeactivated:
+                        logger.warning(f"User {user_id} is deactivated. Cannot send PM confirmation. Removing user.")
+                        await db.delete_user(user_id)
+                        await message.reply_text(f"Successfully connected to **{title}**. However, your account seems deactivated and has been removed from my records.")
+                    except Exception as e:
+                        logger.error(f"Error sending PM confirmation for connection to {title} for user {user_id}: {e}", exc_info=True)
+                        await message.reply_text(f"Successfully connected to **{title}**, but failed to send a PM confirmation due to an error.")
             else:
                 await message.reply_text("You're already connected to this chat!", quote=True)
         else:
