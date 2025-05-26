@@ -28,6 +28,7 @@ from database.gfilters_mdb import (
     del_allg
 )
 import logging
+from plugins.commands import check_user_access
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
@@ -292,17 +293,33 @@ async def advantage_spoll_choker(bot, query):
             files, offset, total_results = await get_search_results(query.message.chat.id, movie, offset=0, filter=True)
             if files:
                 k = (movie, files, offset, total_results)
-                await auto_filter(bot, query, k)
+                await auto_filter(bot, query, k) # auto_filter will handle displaying results or its own "no results"
             else:
-                reqstr1 = query.from_user.id if query.from_user else None
-                if reqstr1 is None:
-                    return
+                # This block is reached if a spell-check suggestion ('movie') results in no files.
+                # 'query.message' is the message showing the spell check suggestions.
+                # 'movie' is the specific suggestion clicked by the user.
+                
+                # Get user details for logging (user who originally sent the message)
+                # query.message.reply_to_message is the user's original message that triggered spell check.
+                user_original_message = query.message.reply_to_message
+                reqstr1 = user_original_message.from_user.id if user_original_message.from_user else None
+                
+                if reqstr1 is None: # Should ideally not happen if reply_to_message exists
+                    # Fallback to the user who clicked the callback if original user cannot be determined
+                    reqstr1 = query.from_user.id if query.from_user else None
+                    if reqstr1 is None:
+                        return # Cannot proceed without a user context for logging/messaging
+
                 reqstr = await bot.get_users(reqstr1)
+                
+                # Log that the spell-checked term also found no results
                 if info.NO_RESULTS_MSG:
                     await bot.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, movie)))
-                k = await query.message.edit(script.MVE_NT_FND)
-                await asyncio.sleep(10)
-                await k.delete()
+
+                # Edit the spell check suggestion message to show "No results found"
+                edited_message = await query.message.edit(f"No results found for '{movie}'. Send a different keyword.")
+                await asyncio.sleep(10)  # Maintain existing delay
+                await edited_message.delete() # Delete the message
 
 
 @Client.on_callback_query()
@@ -539,44 +556,59 @@ async def cb_handler(client: Client, query: CallbackQuery):
                                                        file_caption='' if f_caption is None else f_caption)
             except Exception as e:
                 logger.exception(e)
-            f_caption = f_caption
+            # f_caption = f_caption # This line was redundant, f_caption is already itself
         if f_caption is None:
             f_caption = f"{files.file_name}"
 
+        # Logic for handling who can click and where the file is sent
+        if clicked != typed:
+            return await query.answer(f"𝖧𝖾𝗒 {query.from_user.first_name}, 𝖳𝗁𝗂𝗌 𝗂𝗌 𝗇𝗈𝗍 𝗒𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 !", show_alert=True)
+
         try:
             if info.AUTH_CHANNEL and not await is_subscribed(client, query):
-                if clicked == typed:
-                    await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
-                    return
-                else:
-                    await query.answer(f"𝖧𝖾𝗒 {query.from_user.first_name}, 𝖳𝗁𝗂𝗌 𝗂𝗌 𝗇𝗈𝗍 𝗒𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 !", show_alert=True)
+                await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
+                return
             elif settings['botpm']:
-                if clicked == typed:
-                    await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
-                    return
-                else:
-                    await query.answer(f"𝖧𝖾𝗒 {query.from_user.first_name}, 𝖳𝗁𝗂𝗌 𝗂𝗌 𝗇𝗈𝗍 𝗒𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 !", show_alert=True)
+                await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
+                return
             else:
-                if clicked == typed:
-                    await client.send_cached_media(
-                        chat_id=query.from_user.id,
-                        file_id=file_id,
-                        caption=f_caption,
-                        protect_content=True if ident == "filep" else False,
-                        reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url="https://t.me/kdramaworld_ongoing") ] ] ))
-                else:
-                    await query.answer(f"𝖧𝖾𝗒 {query.from_user.first_name}, 𝖳𝗁𝗂𝗌 𝗂𝗌 𝗇𝗈𝗍 𝗒𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 !", show_alert=True)
+                # Direct file sending part
+                user_id = query.from_user.id
+                can_access, reason = await check_user_access(client, query.message, user_id,increment=False)
+                if not can_access:
+                    await query.answer(reason, show_alert=True)
+                    return
+                ok, reason = await check_user_access(client, query.message, user_id,increment=True)
+                if not ok:
+                    await query.answer(reason, show_alert=True)
+                    return
+                await client.send_cached_media(
+                    chat_id=query.from_user.id,
+                    file_id=file_id,
+                    caption=f_caption,
+                    protect_content=True if ident == "filep" else False,
+                    reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url="https://t.me/kdramaworld_ongoing") ] ] ))
                 await query.answer('𝖢𝗁𝖾𝖼𝗄 𝖯𝖬, 𝖨 𝗁𝖺𝗏𝖾 𝗌𝖾𝗇𝗍 𝖿𝗂𝗅𝖾𝗌 𝗂𝗇 𝖯𝖬', show_alert=True)
         except UserIsBlocked:
             await query.answer('𝖴𝗇𝖻𝗅𝗈𝖼𝗄 𝗍𝗁𝖾 𝖻𝗈𝗍 𝗆𝖺𝗇𝗁 !', show_alert=True)
-        except PeerIdInvalid:
+        except PeerIdInvalid: # Should not happen if botpm is false, but good fallback
             await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
-        except Exception as e:
-            await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
+        except Exception as e: # General error
+            logger.error(f"Error in cb_handler 'file': {e}", exc_info=True)
+            await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}") # Fallback to PM
+
     elif query.data.startswith("checksub"):
-        if info.AUTH_CHANNEL and not await is_subscribed(client, query):
+        user_id = query.from_user.id # Moved user_id retrieval up
+        if info.AUTH_CHANNEL and not await is_subscribed(client, query): # This check should be before access check
             await query.answer("𝖨 𝖫𝗂𝗄𝖾 𝖸𝗈𝗎𝗋 𝖲𝗆𝖺𝗋𝗍𝗇𝖾𝗌𝗌, 𝖡𝗎𝗍 𝖣𝗈𝗇'𝗍 𝖡𝖾 𝖮𝗏𝖾𝗋𝗌𝗆𝖺𝗋𝗍 😒 \n𝖩𝗈𝗂𝗇 𝖴𝗉𝖽𝖺𝗍𝖾 𝖢𝗁𝖺𝗇𝗇𝖾𝗅 𝖿𝗂𝗋𝗌𝗍 ;)", show_alert=True)
             return
+
+        # Now, check user access as they are past the subscription gate (if any)
+        can_access, reason = await check_user_access(client, query.message, user_id,increment=False)
+        if not can_access:
+            await query.answer(reason, show_alert=True)
+            return
+            
         ident, file_id = query.data.split("#")
         files_ = await get_file_details(file_id)
         if not files_:
@@ -584,29 +616,41 @@ async def cb_handler(client: Client, query: CallbackQuery):
         files = files_[0]
         title = files.file_name
         size = get_size(files.file_size)
-        f_caption = files.caption
+        f_caption = files.caption # Intentionally re-assigning, not using previous f_caption due to scope
         if info.KEEP_ORIGINAL_CAPTION:
             try:
                 f_caption = files.caption
             except:
                 f_caption = f"{title}"
-        if info.CUSTOM_FILE_CAPTION:
+        elif info.CUSTOM_FILE_CAPTION: # Ensure this is 'elif' not 'if' to avoid double processing
             try:
                 f_caption = info.CUSTOM_FILE_CAPTION.format(file_name='' if title is None else title,
                                                        file_size='' if size is None else size,
                                                        file_caption='' if f_caption is None else f_caption)
             except Exception as e:
                 logger.exception(e)
-                f_caption = f_caption
-        if f_caption is None:
+                # f_caption remains as it was before this block if CUSTOM_FILE_CAPTION fails
+        if f_caption is None: # Final fallback
             f_caption = f"{title}"
-        await query.answer()
-        await client.send_cached_media(
-            chat_id=query.from_user.id,
-            file_id=file_id,
-            caption=f_caption,
-            protect_content=True if ident == 'checksubp' else False,
-            reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ))
+
+        await query.answer() # Acknowledge callback first
+        ok, reason = await check_user_access(client, query.message, user_id, increment=True)
+        if not ok:
+            await query.answer(reason, show_alert=True)
+            return
+        try:
+            await client.send_cached_media(
+                chat_id=query.from_user.id, # Send to the user who clicked
+                file_id=file_id,
+                caption=f_caption,
+                protect_content=True if ident == 'checksubp' else False, # checksubp for protected content
+                reply_markup=InlineKeyboardMarkup( [ [ InlineKeyboardButton('⎋ Main Channel ⎋', url=info.MAIN_CHANNEL) ] ] ))
+        except UserIsBlocked:
+            await query.answer('𝖴𝗇𝖻𝗅𝗈𝖼𝗄 𝗍𝗁𝖾 𝖻𝗈𝗍 𝗆𝖺𝗇𝗁 !', show_alert=True)
+        except Exception as e:
+            logger.error(f"Error in cb_handler 'checksub': {e}", exc_info=True)
+            await query.answer("An error occurred while sending the file.", show_alert=True)
+
     elif query.data == "pages":
         await query.answer()
 
@@ -1304,9 +1348,11 @@ async def auto_filter(client, msg, spoll=False):
             files, offset, total_results = await get_search_results(message.chat.id ,search.lower(), offset=0, filter=True)
             if not files:
                 if settings["spell_check"]:
-                    return await advantage_spell_chok(client, msg)
+                    return await advantage_spell_chok(client, msg) # Spell check is ON, delegate to advantage_spell_chok
                 else:
-                    if info.NO_RESULTS_MSG:
+                    # Spell check is OFF and no files found
+                    await msg.reply_text(f"No results found for '{search}'. Send a different keyword.")
+                    if info.NO_RESULTS_MSG: # Maintain existing logging
                         await client.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, search)))
                     return
         else:
@@ -1315,6 +1361,12 @@ async def auto_filter(client, msg, spoll=False):
         message = msg.message.reply_to_message  # msg will be callback query
         search, files, offset, total_results = spoll
         settings = await get_settings(msg.message.chat.id)
+
+    user_id = message.from_user.id
+    can_access, reason = await check_user_access(client, message, user_id,increment=False)
+    if not can_access:
+        await message.reply_text(reason)
+        return
         
     key = f"{message.chat.id}-{message.id}"
     temp.FILES_IDS[key] = files
@@ -1457,7 +1509,7 @@ async def auto_filter(client, msg, spoll=False):
             hehe = await message.reply_photo(photo=imdb.get('poster'), caption=cap[:1024], reply_markup=InlineKeyboardMarkup(btn))
             try:
                 if settings['auto_delete']:
-                    await asyncio.sleep(600)
+                    await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                     await hehe.delete()
                     await message.delete()
             except KeyError:
@@ -1465,7 +1517,7 @@ async def auto_filter(client, msg, spoll=False):
                 await save_group_settings(grpid, 'auto_delete', True)
                 settings = await get_settings(message.chat.id)
                 if settings['auto_delete']:
-                    await asyncio.sleep(600)
+                    await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                     await hehe.delete()
                     await message.delete()
         except (MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty):
@@ -1474,7 +1526,7 @@ async def auto_filter(client, msg, spoll=False):
             hmm = await message.reply_photo(photo=poster, caption=cap[:1024], reply_markup=InlineKeyboardMarkup(btn))
             try:
                 if settings['auto_delete']:
-                    await asyncio.sleep(600)
+                    await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                     await hmm.delete()
                     await message.delete()
             except KeyError:
@@ -1482,7 +1534,7 @@ async def auto_filter(client, msg, spoll=False):
                 await save_group_settings(grpid, 'auto_delete', True)
                 settings = await get_settings(message.chat.id)
                 if settings['auto_delete']:
-                    await asyncio.sleep(600)
+                    await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                     await hmm.delete()
                     await message.delete()
         except Exception as e:
@@ -1490,7 +1542,7 @@ async def auto_filter(client, msg, spoll=False):
             fek = await message.reply_photo(photo=info.NOR_IMG, caption=cap, reply_markup=InlineKeyboardMarkup(btn))
             try:
                 if settings['auto_delete']:
-                    await asyncio.sleep(600)
+                    await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                     await fek.delete()
                     await message.delete()
             except KeyError:
@@ -1498,14 +1550,14 @@ async def auto_filter(client, msg, spoll=False):
                 await save_group_settings(grpid, 'auto_delete', True)
                 settings = await get_settings(message.chat.id)
                 if settings['auto_delete']:
-                    await asyncio.sleep(600)
+                    await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                     await fek.delete()
                     await message.delete()
     else:
         fuk = await message.reply_photo(photo=info.NOR_IMG, caption=cap, reply_markup=InlineKeyboardMarkup(btn))
         try:
             if settings['auto_delete']:
-                await asyncio.sleep(600)
+                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                 await fuk.delete()
                 await message.delete()
         except KeyError:
@@ -1513,11 +1565,11 @@ async def auto_filter(client, msg, spoll=False):
             await save_group_settings(grpid, 'auto_delete', True)
             settings = await get_settings(message.chat.id)
             if settings['auto_delete']:
-                await asyncio.sleep(600)
+                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                 await fuk.delete()
                 await message.delete()
     if spoll:
-        await msg.message.delete()
+        return await msg.message.delete()
 
 async def advantage_spell_chok(client, msg):
     mv_id = msg.id
@@ -1535,34 +1587,30 @@ async def advantage_spell_chok(client, msg):
         movies = await get_poster(mv_rqst, bulk=True)
     except Exception as e:
         logger.exception(e)
-        reqst_gle = mv_rqst.replace(" ", "+")
-        button = [[
-                   InlineKeyboardButton("🔎 𝖦𝗈𝗈𝗀𝗅𝖾", url=f"https://www.google.com/search?q={reqst_gle}")
-        ]]
-        if info.NO_RESULTS_MSG:
+        # This block handles exceptions from get_poster (e.g., network issues)
+        # Apply the new "No results found" message here.
+        if info.NO_RESULTS_MSG: # Maintain existing logging
             await client.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
         k = await msg.reply_photo(
-            photo=info.SPELL_IMG,
-            caption=script.I_CUDNT.format(mv_rqst),
-            reply_markup=InlineKeyboardMarkup(button)
+            photo=info.SPELL_IMG, # Use SPELL_IMG as requested
+            caption=f"No results found for '{mv_rqst}'. Send a different keyword.",
+            # No separate button for Google search
         )
-        await asyncio.sleep(30)
+        await asyncio.sleep(30) # Maintain delay and delete
         await k.delete()
         return
     movielist = []
     if not movies:
-        reqst_gle = mv_rqst.replace(" ", "+")
-        button = [[
-                   InlineKeyboardButton("🔎 𝖦𝗈𝗈𝗀𝗅𝖾", url=f"https://www.google.com/search?q={reqst_gle}")
-        ]]
-        if info.NO_RESULTS_MSG:
+        # This is the primary block for when get_poster returns no movie suggestions.
+        if info.NO_RESULTS_MSG: # Maintain existing logging
             await client.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
+        
         k = await msg.reply_photo(
-            photo=info.SPELL_IMG,
-            caption=script.I_CUDNT.format(mv_rqst),
-            reply_markup=InlineKeyboardMarkup(button)
+            photo=info.SPELL_IMG, # Use SPELL_IMG as requested
+            caption=f"No results found for '{mv_rqst}'. Send a different keyword.",
+            # No separate button for Google search
         )
-        await asyncio.sleep(30)
+        await asyncio.sleep(30) # Maintain delay and delete
         await k.delete()
         return
     movielist += [movie.get('title') for movie in movies]
@@ -1585,14 +1633,14 @@ async def advantage_spell_chok(client, msg):
     )
     try:
         if settings['auto_delete']:
-            await asyncio.sleep(600)
+            await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
             await spell_check_del.delete()
     except KeyError:
             grpid = await active_connection(str(msg.from_user.id))
             await save_group_settings(grpid, 'auto_delete', True)
             settings = await get_settings(msg.chat.id)
             if settings['auto_delete']:
-                await asyncio.sleep(600)
+                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                 await spell_check_del.delete()
 
 
@@ -1611,9 +1659,26 @@ async def manual_filters(client, message, text=False):
                 reply_text = reply_text.replace("\\n", "\n").replace("\\t", "\t")
 
             if btn is not None:
+                # User access check before sending file/message for this filter
+                user_id = message.from_user.id
+                if fileid != "None": # Only check if a file is involved
+                    can_access, reason = await check_user_access(client, message, user_id,increment=False)
+                    if not can_access:
+                        await message.reply_text(reason)
+                        break # Stop processing this matched keyword for this user
+                    can_send, reason = await check_user_access(
+                        client, message, user_id,
+                        increment=True
+                    )
+                    if not can_send:
+                        await message.reply_text(reason)
+                        break
+
                 try:
                     if fileid == "None":
                         if btn == "[]":
+                            # This is a text-only response from filter.
+                            # No file access check needed here based on current subtask scope.
                             piroxrk = await client.send_message(
                                 group_id, 
                                 reply_text, 
@@ -1636,14 +1701,14 @@ async def manual_filters(client, message, text=False):
                                 else:
                                     try:
                                         if settings['auto_delete']:
-                                            await asyncio.sleep(600)
+                                            await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                             await piroxrk.delete()
                                     except KeyError:
                                         grpid = await active_connection(str(message.from_user.id))
                                         await save_group_settings(grpid, 'auto_delete', True)
                                         settings = await get_settings(message.chat.id)
                                         if settings['auto_delete']:
-                                            await asyncio.sleep(600)
+                                            await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                             await piroxrk.delete()
                             except KeyError:
                                 grpid = await active_connection(str(message.from_user.id))
@@ -1654,6 +1719,8 @@ async def manual_filters(client, message, text=False):
 
                         else:
                             button = eval(btn)
+                            # This is a text-only response with buttons from filter.
+                            # No file access check needed here based on current subtask scope.
                             piroxrk = await client.send_message(
                                 group_id,
                                 reply_text,
@@ -1677,14 +1744,14 @@ async def manual_filters(client, message, text=False):
                                 else:
                                     try:
                                         if settings['auto_delete']:
-                                            await asyncio.sleep(600)
+                                            await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                             await piroxrk.delete()
                                     except KeyError:
                                         grpid = await active_connection(str(message.from_user.id))
                                         await save_group_settings(grpid, 'auto_delete', True)
                                         settings = await get_settings(message.chat.id)
                                         if settings['auto_delete']:
-                                            await asyncio.sleep(600)
+                                            await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                             await piroxrk.delete()
                             except KeyError:
                                 grpid = await active_connection(str(message.from_user.id))
@@ -1694,6 +1761,7 @@ async def manual_filters(client, message, text=False):
                                     await auto_filter(client, message)
 
                     elif btn == "[]":
+                        # Access check for fileid already performed above
                         piroxrk = await client.send_cached_media(
                             group_id,
                             fileid,
@@ -1716,14 +1784,14 @@ async def manual_filters(client, message, text=False):
                             else:
                                 try:
                                     if settings['auto_delete']:
-                                        await asyncio.sleep(600)
+                                        await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                         await piroxrk.delete()
                                 except KeyError:
                                     grpid = await active_connection(str(message.from_user.id))
                                     await save_group_settings(grpid, 'auto_delete', True)
                                     settings = await get_settings(message.chat.id)
                                     if settings['auto_delete']:
-                                        await asyncio.sleep(600)
+                                        await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                         await piroxrk.delete()
                         except KeyError:
                             grpid = await active_connection(str(message.from_user.id))
@@ -1734,6 +1802,7 @@ async def manual_filters(client, message, text=False):
 
                     else:
                         button = eval(btn)
+                        # Access check for fileid already performed above
                         piroxrk = await message.reply_cached_media(
                             fileid,
                             caption=reply_text or "",
@@ -1755,14 +1824,14 @@ async def manual_filters(client, message, text=False):
                             else:
                                 try:
                                     if settings['auto_delete']:
-                                        await asyncio.sleep(600)
+                                        await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                         await piroxrk.delete()
                                 except KeyError:
                                     grpid = await active_connection(str(message.from_user.id))
                                     await save_group_settings(grpid, 'auto_delete', True)
                                     settings = await get_settings(message.chat.id)
                                     if settings['auto_delete']:
-                                        await asyncio.sleep(600)
+                                        await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                         await piroxrk.delete()
                         except KeyError:
                             grpid = await active_connection(str(message.from_user.id))
@@ -1792,9 +1861,25 @@ async def global_filters(client, message, text=False):
                 reply_text = reply_text.replace("\\n", "\n").replace("\\t", "\t")
 
             if btn is not None:
+                # User access check before sending file/message for this filter
+                user_id = message.from_user.id
+                if fileid != "None": # Only check if a file is involved
+                    can_access, reason = await check_user_access(client, message, user_id,increment=False)
+                    if not can_access:
+                        await message.reply_text(reason)
+                        break # Stop processing this matched keyword for this user
+                    ok, reason = await check_user_access(
+                        client, message, user_id,
+                        increment=True
+                    )
+                    if not ok:
+                        await message.reply_text(reason)
+                        break
                 try:
                     if fileid == "None":
                         if btn == "[]":
+                            # This is a text-only response from filter.
+                            # No file access check needed here.
                             piroxrk = await client.send_message(
                                 group_id, 
                                 reply_text, 
@@ -1819,14 +1904,14 @@ async def global_filters(client, message, text=False):
                                     else:
                                         try:
                                             if settings['auto_delete']:
-                                                await asyncio.sleep(600)
+                                                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                                 await piroxrk.delete()
                                         except KeyError:
                                             grpid = await active_connection(str(message.from_user.id))
                                             await save_group_settings(grpid, 'auto_delete', True)
                                             settings = await get_settings(message.chat.id)
                                             if settings['auto_delete']:
-                                                await asyncio.sleep(600)
+                                                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                                 await piroxrk.delete()
                                 except KeyError:
                                     grpid = await active_connection(str(message.from_user.id))
@@ -1847,6 +1932,8 @@ async def global_filters(client, message, text=False):
                             
                         else:
                             button = eval(btn)
+                            # This is a text-only response with buttons from filter.
+                            # No file access check needed here.
                             piroxrk = await client.send_message(
                                 group_id,
                                 reply_text,
@@ -1872,14 +1959,14 @@ async def global_filters(client, message, text=False):
                                     else:
                                         try:
                                             if settings['auto_delete']:
-                                                await asyncio.sleep(600)
+                                                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                                 await piroxrk.delete()
                                         except KeyError:
                                             grpid = await active_connection(str(message.from_user.id))
                                             await save_group_settings(grpid, 'auto_delete', True)
                                             settings = await get_settings(message.chat.id)
                                             if settings['auto_delete']:
-                                                await asyncio.sleep(600)
+                                                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
                                                 await piroxrk.delete()
                                 except KeyError:
                                     grpid = await active_connection(str(message.from_user.id))
@@ -1899,6 +1986,7 @@ async def global_filters(client, message, text=False):
                                         await piroxrk.delete()
 
                     elif btn == "[]":
+                        # Access check for fileid already performed above
                         piroxrk = await client.send_cached_media(
                             group_id,
                             fileid,
@@ -1951,6 +2039,7 @@ async def global_filters(client, message, text=False):
 
                     else:
                         button = eval(btn)
+                        # Access check for fileid already performed above
                         piroxrk = await message.reply_cached_media(
                             fileid,
                             caption=reply_text or "",
@@ -1975,15 +2064,15 @@ async def global_filters(client, message, text=False):
                                 else:
                                     try:
                                         if settings['auto_delete']:
-                                            await asyncio.sleep(600)
-                                            await piroxrk.delete()
+                                                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
+                                                await piroxrk.delete()
                                     except KeyError:
                                         grpid = await active_connection(str(message.from_user.id))
                                         await save_group_settings(grpid, 'auto_delete', True)
                                         settings = await get_settings(message.chat.id)
                                         if settings['auto_delete']:
-                                            await asyncio.sleep(600)
-                                            await piroxrk.delete()
+                                                await asyncio.sleep(info.MESSAGE_DELETE_SECONDS)
+                                                await piroxrk.delete()
                             except KeyError:
                                 grpid = await active_connection(str(message.from_user.id))
                                 await save_group_settings(grpid, 'auto_ffilter', True)
