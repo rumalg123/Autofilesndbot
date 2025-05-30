@@ -296,30 +296,26 @@ async def advantage_spoll_choker(bot, query):
                 await auto_filter(bot, query, k) # auto_filter will handle displaying results or its own "no results"
             else:
                 # This block is reached if a spell-check suggestion ('movie') results in no files.
-                # 'query.message' is the message showing the spell check suggestions.
-                # 'movie' is the specific suggestion clicked by the user.
-                
-                # Get user details for logging (user who originally sent the message)
-                # query.message.reply_to_message is the user's original message that triggered spell check.
                 user_original_message = query.message.reply_to_message
-                reqstr1 = user_original_message.from_user.id if user_original_message.from_user else None
-                
-                if reqstr1 is None: # Should ideally not happen if reply_to_message exists
-                    # Fallback to the user who clicked the callback if original user cannot be determined
-                    reqstr1 = query.from_user.id if query.from_user else None
-                    if reqstr1 is None:
-                        return # Cannot proceed without a user context for logging/messaging
+                # It's good practice to ensure user_original_message exists before trying to access from_user
+                if user_original_message and user_original_message.from_user:
+                    reqstr1_id = user_original_message.from_user.id
+                else: # Fallback or if original message is not accessible
+                    reqstr1_id = query.from_user.id if query.from_user else None
 
-                reqstr = await bot.get_users(reqstr1)
-                
-                # Log that the spell-checked term also found no results
-                if info.NO_RESULTS_MSG:
-                    await bot.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, movie)))
+                if reqstr1_id: # Proceed if we have a user ID
+                    reqstr_user = await bot.get_users(reqstr1_id)
+                    # Log that the spell-checked term also found no results
+                    if info.NO_RESULTS_MSG:
+                        await bot.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr_user.id, reqstr_user.mention, movie)))
 
-                # Edit the spell check suggestion message to show "No results found"
-                edited_message = await query.message.edit(f"No results found for '{movie}'. Send a different keyword.")
-                await asyncio.sleep(10)  # Maintain existing delay
-                await edited_message.delete() # Delete the message
+                if query.message.chat.type == enums.ChatType.PRIVATE: # Check chat type
+                    edited_message = await query.message.edit(f"No results found for '{movie}'. Send a different keyword.")
+                    await asyncio.sleep(10)
+                    await edited_message.delete()
+                else:
+                    # In a group chat, just delete the spell check message without the "No results" update.
+                    await query.message.delete()
 
 
 @Client.on_callback_query()
@@ -1351,8 +1347,10 @@ async def auto_filter(client, msg, spoll=False):
                     return await advantage_spell_chok(client, msg) # Spell check is ON, delegate to advantage_spell_chok
                 else:
                     # Spell check is OFF and no files found
-                    await msg.reply_text(f"No results found for '{search}'. Send a different keyword.")
-                    if info.NO_RESULTS_MSG: # Maintain existing logging
+                    if message.chat.type == enums.ChatType.PRIVATE: # Check if it's a private chat
+                        await msg.reply_text(f"No results found for '{search}'. Send a different keyword.")
+                    # The logging part should remain, as it's for internal logging, not user-facing.
+                    if info.NO_RESULTS_MSG:
                         await client.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, search)))
                     return
         else:
@@ -1587,31 +1585,27 @@ async def advantage_spell_chok(client, msg):
         movies = await get_poster(mv_rqst, bulk=True)
     except Exception as e:
         logger.exception(e)
-        # This block handles exceptions from get_poster (e.g., network issues)
-        # Apply the new "No results found" message here.
-        if info.NO_RESULTS_MSG: # Maintain existing logging
+        if msg.chat.type == enums.ChatType.PRIVATE: # Check chat type
+            k = await msg.reply_photo(
+                photo=info.SPELL_IMG,
+                caption=f"No results found for '{mv_rqst}'. Send a different keyword.",
+            )
+            await asyncio.sleep(30)
+            await k.delete()
+        if info.NO_RESULTS_MSG:
             await client.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
-        k = await msg.reply_photo(
-            photo=info.SPELL_IMG, # Use SPELL_IMG as requested
-            caption=f"No results found for '{mv_rqst}'. Send a different keyword.",
-            # No separate button for Google search
-        )
-        await asyncio.sleep(30) # Maintain delay and delete
-        await k.delete()
         return
     movielist = []
     if not movies:
-        # This is the primary block for when get_poster returns no movie suggestions.
-        if info.NO_RESULTS_MSG: # Maintain existing logging
+        if msg.chat.type == enums.ChatType.PRIVATE: # Check chat type
+            k = await msg.reply_photo(
+                photo=info.SPELL_IMG,
+                caption=f"No results found for '{mv_rqst}'. Send a different keyword.",
+            )
+            await asyncio.sleep(30)
+            await k.delete()
+        if info.NO_RESULTS_MSG:
             await client.send_message(chat_id=info.LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
-        
-        k = await msg.reply_photo(
-            photo=info.SPELL_IMG, # Use SPELL_IMG as requested
-            caption=f"No results found for '{mv_rqst}'. Send a different keyword.",
-            # No separate button for Google search
-        )
-        await asyncio.sleep(30) # Maintain delay and delete
-        await k.delete()
         return
     movielist += [movie.get('title') for movie in movies]
     movielist += [f"{movie.get('title')} {movie.get('year')}" for movie in movies]
