@@ -35,12 +35,24 @@ async def answer(bot, query):
                            switch_pm_parameter="hehe")
         return
 
-    if info.AUTH_CHANNEL and not await is_subscribed(bot, query):
-        await query.answer(results=[],
-                           cache_time=0,
-                           switch_pm_text='𝖸𝗈𝗎 𝖧𝖺𝗏𝖾 𝖳𝗈 𝖲𝗎𝖻𝗌𝖼𝗋𝗂𝖻𝖾 𝖬𝗒 𝖢𝗁𝖺𝗇𝗇𝖾𝗅 𝖳𝗈 𝖴𝗌𝖾 𝖬𝖾 :)',
-                           switch_pm_parameter="subscribe")
-        return
+    if info.AUTH_CHANNEL:
+        subscribed = await is_subscribed(bot, query)
+        if subscribed is None:
+            await query.answer(
+                results=[],
+                cache_time=0,
+                switch_pm_text="Subscription check failed. Contact the bot owner.",
+                switch_pm_parameter="subscribe",
+            )
+            return
+        if not subscribed:
+            await query.answer(
+                results=[],
+                cache_time=0,
+                switch_pm_text='𝖸𝗈𝗎 𝖧𝖺𝗏𝖾 𝖳𝗈 𝖲𝗎𝖻𝗌𝖼𝗋𝗂𝖻𝖾 𝖬𝗒 𝖢𝗁𝖺𝗇𝗇𝖾𝗅 𝖳𝗈 𝖴𝗌𝖾 𝖬𝗲 :)',
+                switch_pm_parameter="subscribe",
+            )
+            return
 
     user_id = query.from_user.id
     if not await db.is_user_exist(user_id):
