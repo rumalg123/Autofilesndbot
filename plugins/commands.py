@@ -15,7 +15,14 @@ from database.users_chats_db import db
 #from info import CHANNELS, ADMINS, AUTH_CHANNEL, LOG_CHANNEL, PICS, BATCH_FILE_CAPTION, CUSTOM_FILE_CAPTION, SUPPORT_CHAT, PROTECT_CONTENT, REQST_CHANNEL, SUPPORT_CHAT_ID, MAX_B_TN, FILE_STORE_CHANNEL, PUBLIC_FILE_STORE, KEEP_ORIGINAL_CAPTION, initialize_configuration
 import info
 from info import PREMIUM_DURATION_DAYS, NON_PREMIUM_DAILY_LIMIT  # Added
-from utils import get_settings, get_size, is_subscribed, save_group_settings, temp
+from utils import (
+    get_settings,
+    get_size,
+    is_subscribed,
+    save_group_settings,
+    temp,
+    render_caption,
+)
 from database.connections_mdb import active_connection
 import re
 import json
@@ -644,11 +651,13 @@ async def start(client, message):
                     f_caption = file_item.file_name
             elif info.CUSTOM_FILE_CAPTION:
                 try:
-                    f_caption = info.CUSTOM_FILE_CAPTION.format(file_name='' if title is None else title,
-                                                                file_size='' if size is None else size,
-                                                                file_caption='' if getattr(file_item, 'caption',
-                                                                                           None) is None else file_item.caption)
-                except:
+                    f_caption = render_caption(
+                        info.CUSTOM_FILE_CAPTION,
+                        title=title,
+                        size=size,
+                        caption=getattr(file_item, 'caption', None),
+                    )
+                except Exception:
                     f_caption = getattr(file_item, 'caption', file_item.file_name)  # Fallback
             if f_caption is None:
                 f_caption = f"{file_item.file_name}"
@@ -728,10 +737,12 @@ async def start(client, message):
                     f_caption = msg_item.get("title")
             elif info.BATCH_FILE_CAPTION:
                 try:
-                    f_caption = info.BATCH_FILE_CAPTION.format(file_name='' if title is None else title,
-                                                               file_size='' if size is None else size,
-                                                               file_caption='' if msg_item.get(
-                                                                   "caption") is None else msg_item.get("caption"))
+                    f_caption = render_caption(
+                        info.BATCH_FILE_CAPTION,
+                        title=title,
+                        size=size,
+                        caption=msg_item.get("caption"),
+                    )
                 except Exception as e:
                     logger.exception(e)
                     f_caption = msg_item.get("caption", title)  # Fallback
@@ -808,9 +819,12 @@ async def start(client, message):
                         f_caption = getattr(media, 'file_name', '')
                 elif info.BATCH_FILE_CAPTION:  # Using BATCH_FILE_CAPTION for DSTORE as well
                     try:
-                        f_caption = info.BATCH_FILE_CAPTION.format(file_name=getattr(media, 'file_name', ''),
-                                                                   file_size=getattr(media, 'file_size', 0),
-                                                                   file_caption=getattr(dstore_msg_item, 'caption', ''))
+                        f_caption = render_caption(
+                            info.BATCH_FILE_CAPTION,
+                            title=getattr(media, 'file_name', ''),
+                            size=getattr(media, 'file_size', 0),
+                            caption=getattr(dstore_msg_item, 'caption', ''),
+                        )
                     except Exception as e:
                         logger.exception(e)
                         f_caption = getattr(dstore_msg_item, 'caption', '')
@@ -886,9 +900,12 @@ async def start(client, message):
         pass
     elif info.CUSTOM_FILE_CAPTION:
         try:
-            f_caption = info.CUSTOM_FILE_CAPTION.format(file_name='' if title is None else title,
-                                                        file_size='' if size is None else size,
-                                                        file_caption='' if f_caption is None else f_caption)
+            f_caption = render_caption(
+                info.CUSTOM_FILE_CAPTION,
+                title=title,
+                size=size,
+                caption=f_caption,
+            )
         except Exception as e:
             logger.exception(e)
             # Keep original f_caption if template fails

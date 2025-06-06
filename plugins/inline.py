@@ -8,7 +8,7 @@ from database.connections_mdb import active_connection
 from database.ia_filterdb import get_search_results
 from database.users_chats_db import db # Added db import
 import info
-from utils import is_subscribed, get_size, temp
+from utils import is_subscribed, get_size, temp, render_caption
 
 logger = logging.getLogger(__name__)
 cache_time = 0 if info.AUTH_USERS or info.AUTH_CHANNEL else info.CACHE_TIME
@@ -183,7 +183,12 @@ async def answer(bot, query):
                 f_caption = f"<code>{title}</code>"
         elif info.CUSTOM_FILE_CAPTION:
             try:
-                f_caption=info.CUSTOM_FILE_CAPTION.format(file_name= '' if title is None else title, file_size='' if size is None else size, file_caption='' if f_caption is None else f_caption)
+                f_caption = render_caption(
+                    info.CUSTOM_FILE_CAPTION,
+                    title=title,
+                    size=size,
+                    caption=f_caption,
+                )
             except Exception as e:
                 logger.exception(e)
                 f_caption=f_caption

@@ -219,6 +219,35 @@ def get_size(size):
         size /= 1024.0
     return "%.2f %s" % (size, units[i])
 
+def render_caption(template: str, title: str = None, size: str = None, caption: str = None) -> str:
+    """Render a file caption using a template.
+
+    Supports both ``file_name`` and ``filename`` placeholders as well as
+    ``file_size``/``filesize`` and ``file_caption``/``caption`` to maintain
+    compatibility with older configuration values.
+    """
+
+    if not template:
+        return caption or title
+
+    context = {
+        "file_name": "" if title is None else title,
+        "filename": "" if title is None else title,
+        "file_size": "" if size is None else size,
+        "filesize": "" if size is None else size,
+        "file_caption": "" if caption is None else caption,
+        "caption": "" if caption is None else caption,
+    }
+
+    try:
+        return template.format(**context)
+    except KeyError as exc:
+        logger.error("Missing placeholder in CUSTOM_FILE_CAPTION: %s", exc)
+        return caption or title
+    except Exception:
+        logger.exception("Failed to format custom caption")
+        return caption or title
+
 def split_list(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]  
@@ -470,9 +499,12 @@ async def send_all(bot, userid, files, ident):
                 f_caption = f"{title}"
         elif info.CUSTOM_FILE_CAPTION:
             try:
-                f_caption = info.CUSTOM_FILE_CAPTION.format(file_name='' if title is None else title,
-                                                        file_size='' if size is None else size,
-                                                        file_caption='' if f_caption is None else f_caption)
+                f_caption = render_caption(
+                    info.CUSTOM_FILE_CAPTION,
+                    title=title,
+                    size=size,
+                    caption=f_caption,
+                )
             except Exception as e:
                 print(e)
                 f_caption = f_caption

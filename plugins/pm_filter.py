@@ -14,7 +14,15 @@ import info
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, InputMediaPhoto
 from pyrogram import Client, filters, enums
 from pyrogram.errors import UserIsBlocked, MessageNotModified, PeerIdInvalid
-from utils import get_size, is_subscribed, get_poster, temp, get_settings, save_group_settings
+from utils import (
+    get_size,
+    is_subscribed,
+    get_poster,
+    temp,
+    get_settings,
+    save_group_settings,
+    render_caption,
+)
 from database.users_chats_db import db
 from database.ia_filterdb import Media, get_file_details, get_search_results, get_bad_files
 from database.filters_mdb import (
@@ -547,9 +555,12 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 f_caption = f"{title}"
         elif info.CUSTOM_FILE_CAPTION:
             try:
-                f_caption = info.CUSTOM_FILE_CAPTION.format(file_name='' if title is None else title,
-                                                       file_size='' if size is None else size,
-                                                       file_caption='' if f_caption is None else f_caption)
+                f_caption = render_caption(
+                    info.CUSTOM_FILE_CAPTION,
+                    title=title,
+                    size=size,
+                    caption=f_caption,
+                )
             except Exception as e:
                 logger.exception(e)
             # f_caption = f_caption # This line was redundant, f_caption is already itself
@@ -639,9 +650,12 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 f_caption = f"{title}"
         elif info.CUSTOM_FILE_CAPTION: # Ensure this is 'elif' not 'if' to avoid double processing
             try:
-                f_caption = info.CUSTOM_FILE_CAPTION.format(file_name='' if title is None else title,
-                                                       file_size='' if size is None else size,
-                                                       file_caption='' if f_caption is None else f_caption)
+                f_caption = render_caption(
+                    info.CUSTOM_FILE_CAPTION,
+                    title=title,
+                    size=size,
+                    caption=f_caption,
+                )
             except Exception as e:
                 logger.exception(e)
                 # f_caption remains as it was before this block if CUSTOM_FILE_CAPTION fails
