@@ -561,9 +561,17 @@ async def cb_handler(client: Client, query: CallbackQuery):
             return await query.answer(f"𝖧𝖾𝗒 {query.from_user.first_name}, 𝖳𝗁𝗂𝗌 𝗂𝗌 𝗇𝗈𝗍 𝗒𝗈𝗎𝗋 𝗋𝖾𝗊𝗎𝖾𝗌𝗍 !", show_alert=True)
 
         try:
-            if info.AUTH_CHANNEL and not await is_subscribed(client, query):
-                await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
-                return
+            if info.AUTH_CHANNEL:
+                subscribed = await is_subscribed(client, query)
+                if subscribed is None:
+                    await query.answer(
+                        "Subscription check failed. Contact the bot owner.",
+                        show_alert=True,
+                    )
+                    return
+                if not subscribed:
+                    await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
+                    return
             elif settings['botpm']:
                 await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}")
                 return
@@ -594,10 +602,21 @@ async def cb_handler(client: Client, query: CallbackQuery):
             await query.answer(url=f"https://t.me/{temp.U_NAME}?start={ident}_{file_id}") # Fallback to PM
 
     elif query.data.startswith("checksub"):
-        user_id = query.from_user.id # Moved user_id retrieval up
-        if info.AUTH_CHANNEL and not await is_subscribed(client, query): # This check should be before access check
-            await query.answer("𝖨 𝖫𝗂𝗄𝖾 𝖸𝗈𝗎𝗋 𝖲𝗆𝖺𝗋𝗍𝗇𝖾𝗌𝗌, 𝖡𝗎𝗍 𝖣𝗈𝗇'𝗍 𝖡𝖾 𝖮𝗏𝖾𝗋𝗌𝗆𝖺𝗋𝗍 😒 \n𝖩𝗈𝗂𝗇 𝖴𝗉𝖽𝖺𝗍𝖾 𝖢𝗁𝖺𝗇𝗇𝖾𝗅 𝖿𝗂𝗋𝗌𝗍 ;)", show_alert=True)
-            return
+        user_id = query.from_user.id  # Moved user_id retrieval up
+        if info.AUTH_CHANNEL:
+            subscribed = await is_subscribed(client, query)
+            if subscribed is None:
+                await query.answer(
+                    "Subscription check failed. Contact the bot owner.",
+                    show_alert=True,
+                )
+                return
+            if not subscribed:
+                await query.answer(
+                    "𝖨 𝖫𝗂𝗄𝖾 𝖸𝗈𝗎𝗋 𝖲𝗆𝖺𝗋𝗍𝗇𝖾𝗌𝗌, 𝖡𝗎𝗍 𝖣𝗈𝗇'𝗍 𝖡𝖾 𝖮𝗏𝖾𝗋𝗌𝗆𝖺𝗋𝗍 😒 \n𝖩𝗈𝗂𝗇 𝖴𝗉𝖽𝖺𝗍𝖾 𝖢𝗁𝖺𝗇𝗇𝖾𝗅 𝖿𝗂𝗋𝗌𝗍 ;)",
+                    show_alert=True,
+                )
+                return
 
         # Now, check user access as they are past the subscription gate (if any)
         can_access, reason = await check_user_access(client, query.message, user_id,increment=False)

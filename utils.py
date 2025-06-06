@@ -9,7 +9,14 @@ import requests
 from bs4 import BeautifulSoup
 from imdb import Cinemagoer
 from pyrogram import enums
-from pyrogram.errors import InputUserDeactivated, UserNotParticipant, FloodWait, UserIsBlocked, PeerIdInvalid
+from pyrogram.errors import (
+    InputUserDeactivated,
+    UserNotParticipant,
+    FloodWait,
+    UserIsBlocked,
+    PeerIdInvalid,
+    ChatAdminRequired,
+)
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 
 from database.users_chats_db import db
@@ -43,16 +50,22 @@ class temp(object):
     FILES_IDS = {}
 
 async def is_subscribed(bot, query):
+    """Check whether a user is subscribed to the AUTH_CHANNEL."""
     try:
         user = await bot.get_chat_member(info.AUTH_CHANNEL, query.from_user.id)
     except UserNotParticipant:
-        pass
-    except Exception as e:
-        logger.exception(e)
+        return False
+    except ChatAdminRequired:
+        logger.warning(
+            "Bot is not an admin in AUTH_CHANNEL; cannot verify subscription"
+        )
+        return None
+    except Exception as e:  # pragma: no cover - unexpected errors
+        logger.exception("Failed to check subscription", exc_info=e)
+        return None
     else:
         if user.status != enums.ChatMemberStatus.BANNED:
             return True
-
     return False
 
 async def get_poster(query, bulk=False, id=False, file=None):

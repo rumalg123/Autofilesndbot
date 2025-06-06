@@ -535,18 +535,40 @@ async def start(client, message):
             await message.reply_text(reason)
             return
 
-    if info.AUTH_CHANNEL and not await is_subscribed(client, message):
-        try:
-            invite_link = await client.create_chat_invite_link(int(info.AUTH_CHANNEL))
-        except ChatAdminRequired:
-            logger.error("Make sure Bot is admin in Force Sub channel")
-        btn = [
-            [
-                InlineKeyboardButton(
-                    "🤖 𝖩𝗈𝗂𝗇 𝖴𝗉𝖽𝖺𝗍𝖾𝗌 𝖢𝗁𝖺𝗇𝗇𝖾𝗅 🤖", url=invite_link.invite_link
+    if info.AUTH_CHANNEL:
+        subscribed = await is_subscribed(client, message)
+        if subscribed is None:
+            if info.ADMINS:
+                await client.send_message(
+                    info.ADMINS[0],
+                    "Please add me as an admin in AUTH_CHANNEL to enable force subscribe feature."
                 )
+            await message.reply_text(
+                "Subscription verification failed. Please contact the bot owner."
+            )
+            return
+        if not subscribed:
+            try:
+                invite_link = await client.create_chat_invite_link(int(info.AUTH_CHANNEL))
+            except ChatAdminRequired:
+                logger.error("Make sure Bot is admin in Force Sub channel")
+                if info.ADMINS:
+                    await client.send_message(
+                        info.ADMINS[0],
+                        "I couldn't create an invite link for AUTH_CHANNEL. Grant me admin rights."
+                    )
+                await message.reply_text(
+                    "Bot is not admin in the updates channel. Contact the bot owner."
+                )
+                return
+            btn = [
+                [
+                    InlineKeyboardButton(
+                        "🤖 𝖩𝗈𝗂𝗇 𝖴𝗉𝖽𝖺𝗍𝖾𝗌 𝖢𝗁𝖺𝗇𝗇𝖾𝗅 🤖",
+                        url=invite_link.invite_link,
+                    )
+                ]
             ]
-        ]
 
         if message.command[1] != "subscribe" or message.command[1] != "send_all":
             try:
