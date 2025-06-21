@@ -10,6 +10,7 @@ from pyrogram.errors import ChatAdminRequired, FloodWait
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram.errors.exceptions.bad_request_400 import ChannelInvalid, UsernameInvalid, UsernameNotModified
 from pyrogram.types import Message  # Added Message
+from pyrogram.enums import ParseMode
 from database.ia_filterdb import Media, get_file_details, unpack_new_file_id, get_bad_files
 from database.users_chats_db import db
 #from info import CHANNELS, ADMINS, AUTH_CHANNEL, LOG_CHANNEL, PICS, BATCH_FILE_CAPTION, CUSTOM_FILE_CAPTION, SUPPORT_CHAT, PROTECT_CONTENT, REQST_CHANNEL, SUPPORT_CHAT_ID, MAX_B_TN, FILE_STORE_CHANNEL, PUBLIC_FILE_STORE, KEEP_ORIGINAL_CAPTION, initialize_configuration
@@ -1713,7 +1714,7 @@ async def ping(_, message):
 @Client.on_message(filters.command("restart") & filters.user(info.ADMINS) & filters.private)
 async def restart_bot(client, message):
     # Notify user about restart
-    restart_msg = await message.reply_text("♻️ **Restarting bot...**\n\n*Updating code and restarting. Please wait.*")
+    restart_msg = await message.reply_text("♻️ <b>Restarting bot...</b>\n\n<b>Updating code and restarting. Please wait.</b>",parse_mode=ParseMode.HTML)
 
     if os.path.exists("Logs.txt"):
         os.remove("Logs.txt")
@@ -1756,7 +1757,7 @@ async def update_restart_status(client):
                 await client.edit_message_text(
                     chat_id=int(chat_id),
                     message_id=int(message_id),
-                    text="✅ Successfully restarted! V1.0.2"
+                    text="✅ Successfully restarted! V1.0.4"
                 )
             except Exception as e:
                 print("Failed to update restart message:", e)
