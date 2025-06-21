@@ -121,6 +121,7 @@ async def addfilter(client, message):
         return await message.reply(f"You are anonymous admin. Use /connect {message.chat.id} in PM")
     chat_type = message.chat.type
     args = message.text.html.split(None, 1)
+    fileid = None  # Initialize fileid to a default value
 
     if chat_type == enums.ChatType.PRIVATE:
         grpid = await active_connection(str(userid))

@@ -76,6 +76,7 @@ P_TTI_SHOW_OFF = is_enabled(environ.get('P_TTI_SHOW_OFF', "True"), False)
 IMDB = is_enabled(environ.get('IMDB', "False"), True)
 AUTO_FFILTER = is_enabled(environ.get('AUTO_FFILTER', "True"), True)
 AUTO_DELETE = is_enabled(environ.get('AUTO_DELETE', "True"), True)
+AUTO_DELETE_TIME = int(environ.get('AUTO_DELETE_TIME', 300))  # Default to 5 minutes (300 seconds)
 SINGLE_BUTTON = is_enabled(environ.get('SINGLE_BUTTON', "True"), True)
 CUSTOM_FILE_CAPTION = environ.get("CUSTOM_FILE_CAPTION", '📂 <em>File Name</em>: <code>|{file_name}</code> \n\n🖇 <em>File Size</em>: <code>{file_size}</code> \n\n❤️‍🔥 <b>Join @kdramaworld_ongoing</b> \n Bot @filefilter001bot \n\n <b>Have A Nice Day 💖</b>')
 BATCH_FILE_CAPTION = environ.get("BATCH_FILE_CAPTION", '')
@@ -112,6 +113,7 @@ LOG_STR += ("Spell Check Mode is enabled, the bot will suggest related movies if
 LOG_STR += (f"MAX_LIST_ELM found, long lists will be shortened to the first {MAX_LIST_ELM} elements.\n" if MAX_LIST_ELM
             else "Full list of casts and crew will be shown in the IMDB template; restrict them by adding a value to MAX_LIST_ELM.\n")
 LOG_STR += f"Your current IMDB template is {IMDB_TEMPLATE}\n"
+LOG_STR += f"Custom auto-delete time is set to {AUTO_DELETE_TIME} seconds.\n" if AUTO_DELETE_TIME != 300 else "Using default auto-delete time of 5 minutes.\n"
 LOG_STR += f"Upstream Repo {UPSTREAM_REPO}\n"
 LOG_STR += f"Upstream Branch {UPSTREAM_BRANCH}"
 
@@ -161,6 +163,7 @@ def get_config_data_from_env():
         "IMDB": IMDB,
         "AUTO_FFILTER": AUTO_FFILTER,
         "AUTO_DELETE": AUTO_DELETE,
+        "AUTO_DELETE_TIME": AUTO_DELETE_TIME,
         "SINGLE_BUTTON": SINGLE_BUTTON,
         "CUSTOM_FILE_CAPTION": CUSTOM_FILE_CAPTION,
         "BATCH_FILE_CAPTION": BATCH_FILE_CAPTION,
@@ -229,6 +232,7 @@ P_TTI_SHOW_OFF = CONFIG.get("P_TTI_SHOW_OFF")
 IMDB_TEMPLATE = CONFIG.get("IMDB_TEMPLATE")
 AUTO_FFILTER = CONFIG.get("AUTO_FFILTER")
 AUTO_DELETE = CONFIG.get("AUTO_DELETE")
+AUTO_DELETE_TIME = CONFIG.get("AUTO_DELETE_TIME", AUTO_DELETE_TIME)
 SINGLE_BUTTON = CONFIG.get("SINGLE_BUTTON")
 CUSTOM_FILE_CAPTION = CONFIG.get("CUSTOM_FILE_CAPTION")
 BATCH_FILE_CAPTION = CONFIG.get("BATCH_FILE_CAPTION")
