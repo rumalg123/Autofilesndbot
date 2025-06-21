@@ -41,6 +41,9 @@ PREMIUM_DURATION_DAYS = int(environ.get('PREMIUM_DURATION_DAYS', 30))
 NON_PREMIUM_DAILY_LIMIT = int(environ.get('NON_PREMIUM_DAILY_LIMIT', 10))
 MESSAGE_DELETE_SECONDS = int(environ.get('MESSAGE_DELETE_SECONDS', 300))
 
+# --- New Premium Setting ---
+DISABLE_PREMIUM_FOR_USERS = is_enabled(environ.get('DISABLE_PREMIUM_FOR_USERS', "False"), False)
+
 # Bot images & videos
 PICS = environ.get('PICS', 'https://graph.org/file/bdc720faf2ff35cf92563.jpg').split()
 NOR_IMG = environ.get("NOR_IMG", "https://graph.org/file/bdc720faf2ff35cf92563.jpg")
@@ -96,7 +99,9 @@ POWERED_BY = environ.get("POWERED_BY", "@kdramaworld_ongoing")
 SUPPORT_GROUP = environ.get("SUPPORT_GROUP", "https://t.me/kdramasmirrorchat")
 SUPPORT_GROUP_USERNAME = environ.get("SUPPORT_GROUP_USERNAME", "@kdramasmirrorchat")
 MAIN_CHANNEL = environ.get("MAIN_CHANNEL", "https://t.me/kdramaworld_ongoing")
-START_TEXT = environ.get("START_TEXT", f"HELLO!! This bot offers a premium plan valid for 30 days with unlimited file retrievals. Free users can retrieve up to {NON_PREMIUM_DAILY_LIMIT} files per day. Check out /plans for more details.")
+
+# START_TEXT definition is moved after DISABLE_PREMIUM_FOR_USERS is loaded from CONFIG.
+# START_TEXT = environ.get("START_TEXT", f"HELLO!! This bot offers a premium plan valid for 30 days with unlimited file retrievals. Free users can retrieve up to {NON_PREMIUM_DAILY_LIMIT} files per day. Check out /plans for more details.")
 
 # A log string (for informational purposes)
 LOG_STR = "Current Cusomized Configurations are:-\n"
@@ -182,10 +187,11 @@ def get_config_data_from_env():
         "SUPPORT_GROUP": SUPPORT_GROUP,
         "SUPPORT_GROUP_USERNAME": SUPPORT_GROUP_USERNAME,
         "MAIN_CHANNEL": MAIN_CHANNEL,
-        "START_TEXT": START_TEXT,
+        "START_TEXT": environ.get("START_TEXT"), # Get from env, or None
         "PREMIUM_DURATION_DAYS": PREMIUM_DURATION_DAYS,
         "NON_PREMIUM_DAILY_LIMIT": NON_PREMIUM_DAILY_LIMIT,
         "MESSAGE_DELETE_SECONDS": MESSAGE_DELETE_SECONDS,
+        "DISABLE_PREMIUM_FOR_USERS": DISABLE_PREMIUM_FOR_USERS,
     }
     return config_data
 
@@ -253,8 +259,197 @@ POWERED_BY = CONFIG.get("POWERED_BY")
 SUPPORT_GROUP = CONFIG.get("SUPPORT_GROUP")
 SUPPORT_GROUP_USERNAME = CONFIG.get("SUPPORT_GROUP_USERNAME")
 MAIN_CHANNEL = CONFIG.get("MAIN_CHANNEL")
-START_TEXT = CONFIG.get("START_TEXT")
+# START_TEXT is now defined below, after DISABLE_PREMIUM_FOR_USERS is loaded
+
 PREMIUM_DURATION_DAYS = CONFIG.get("PREMIUM_DURATION_DAYS", PREMIUM_DURATION_DAYS)
 NON_PREMIUM_DAILY_LIMIT = CONFIG.get("NON_PREMIUM_DAILY_LIMIT", NON_PREMIUM_DAILY_LIMIT)
 MESSAGE_DELETE_SECONDS = CONFIG.get("MESSAGE_DELETE_SECONDS", MESSAGE_DELETE_SECONDS)
+DISABLE_PREMIUM_FOR_USERS = CONFIG.get("DISABLE_PREMIUM_FOR_USERS", DISABLE_PREMIUM_FOR_USERS)
 
+# Define START_TEXT based on whether premium is disabled
+if DISABLE_PREMIUM_FOR_USERS:
+    _default_start_text = "Hello! Welcome to our bot. Enjoy unlimited access to all features."
+else:
+    _default_start_text = f"HELLO!! This bot offers a premium plan valid for 30 days with unlimited file retrievals. Free users can retrieve up to {NON_PREMIUM_DAILY_LIMIT} files per day. Check out /plans for more details."
+
+START_TEXT = environ.get("START_TEXT", _default_start_text)
+# If START_TEXT was loaded from DB (via CONFIG), and it's not the placeholder from env, use it.
+# Otherwise, use the dynamically generated one.
+# This allows user to override with their own START_TEXT from .env even if premium is disabled.
+# However, the default behavior if START_TEXT is not in .env is to use the conditional one.
+# A bit complex: if user explicitly sets START_TEXT in .env, that takes precedence.
+# If they don't, then the conditional logic (_default_start_text) applies.
+# CONFIG.get("START_TEXT") might be None if it was never set in DB or .env initially.
+# Let's simplify: The environment variable always takes precedence if set.
+# If not set in env, then the conditional default is used.
+# And this whole block (environ.get or conditional) is what gets stored in DB if nothing was there.
+
+# Re-evaluation for START_TEXT based on CONFIG and then conditional default:
+# 1. Try to get START_TEXT from environment (highest priority for fresh start)
+# 2. If not in env, try to get from CONFIG (loaded from DB)
+# 3. If not in CONFIG (e.g. first run, or not saved before), then use the conditional default.
+
+# Let's refine the logic for START_TEXT initialization:
+# The module-level START_TEXT will be what's used by the bot.
+# It should reflect the env var if present, else the DB value if present, else the conditional default.
+
+# Initial value from environment (could be None)
+_env_start_text = environ.get('START_TEXT')
+
+if _env_start_text: # User explicitly set it in .env
+    START_TEXT = _env_start_text
+elif CONFIG.get("START_TEXT"): # It was in the database
+    START_TEXT = CONFIG.get("START_TEXT")
+else: # Not in .env and not in DB, so use conditional default
+    if DISABLE_PREMIUM_FOR_USERS:
+        START_TEXT = "Hello! Welcome to our bot. Enjoy unlimited access to all features."
+    else:
+        START_TEXT = f"HELLO!! This bot offers a premium plan valid for 30 days with unlimited file retrievals. Free users can retrieve up to {NON_PREMIUM_DAILY_LIMIT} files per day. Check out /plans for more details."
+
+# Ensure START_TEXT is part of the config to be saved back if it was determined by conditional logic
+if "START_TEXT" not in CONFIG or CONFIG["START_TEXT"] is None: # If it wasn't in DB or was None
+    CONFIG["START_TEXT"] = START_TEXT # This ensures the dynamically chosen START_TEXT is saved if it was default
+
+# The above logic for START_TEXT needs to be part of the `initialize_configuration` or happen just after it.
+# The current placement is fine, as CONFIG is already populated.
+# The key is that `START_TEXT` as a global variable in `info.py` is correctly set.
+
+# Let's simplify the START_TEXT definition logic to be clearer and ensure it's correctly
+# reflected in the CONFIG for saving if it was derived.
+
+# Define default based on premium status (used if no specific START_TEXT is provided by user)
+if DISABLE_PREMIUM_FOR_USERS:
+    DEFAULT_CONDITIONAL_START_TEXT = "Hello! Welcome to our bot. Enjoy unlimited access to all features."
+else:
+    DEFAULT_CONDITIONAL_START_TEXT = f"HELLO!! This bot offers a premium plan valid for 30 days with unlimited file retrievals. Free users can retrieve up to {NON_PREMIUM_DAILY_LIMIT} files per day. Check out /plans for more details."
+
+# 1. Get from environment (highest priority)
+# 2. Else, get from DB (via CONFIG)
+# 3. Else, use the conditional default
+START_TEXT = environ.get('START_TEXT') or CONFIG.get('START_TEXT') or DEFAULT_CONDITIONAL_START_TEXT
+
+# If START_TEXT was derived from DEFAULT_CONDITIONAL_START_TEXT (i.e., not set in env or DB),
+# make sure this derived value is updated in the CONFIG object so it can be saved to DB if it's new.
+if not environ.get('START_TEXT') and not CONFIG.get('START_TEXT'):
+    CONFIG['START_TEXT'] = START_TEXT
+
+
+# The global START_TEXT variable is now correctly set.
+# The `get_config_data_from_env` function also needs to be aware of this.
+# When `get_config_data_from_env` is called, `DISABLE_PREMIUM_FOR_USERS` (from env) is known.
+# So, `START_TEXT` in `get_config_data_from_env` should also reflect this logic.
+
+# This is getting complicated because of the order of operations and desire for env > db > default.
+# Let's make sure `CONFIG` accurately reflects the `START_TEXT` to be used and potentially saved.
+
+# Final simplified approach for setting the global START_TEXT:
+# The module-level variables (like DISABLE_PREMIUM_FOR_USERS, NON_PREMIUM_DAILY_LIMIT)
+# are already set from CONFIG (which loaded from DB or env).
+# So we can use them directly to define START_TEXT.
+
+if DISABLE_PREMIUM_FOR_USERS:
+    _default_start_text_val = "Hello! Welcome to our bot. Enjoy unlimited access to all features."
+else:
+    _default_start_text_val = f"HELLO!! This bot offers a premium plan valid for 30 days with unlimited file retrievals. Free users can retrieve up to {NON_PREMIUM_DAILY_LIMIT} files per day. Check out /plans for more details."
+
+# Use the START_TEXT from environment if provided, otherwise use the one from CONFIG (which might be from DB),
+# otherwise use the just-defined default conditional text.
+# This order ensures: ENV > DB > Conditional Default for the *runtime value* of START_TEXT.
+START_TEXT = environ.get('START_TEXT') or CONFIG.get('START_TEXT', _default_start_text_val)
+
+# Now, we also need to ensure that `get_config_data_from_env` provides a *default* START_TEXT
+# that is conditional, in case it's the first time and nothing is in .env or DB.
+# And that `CONFIG["START_TEXT"]` (when initially populated from env or later when saving) is correct.
+
+# Let's adjust `get_config_data_from_env` first, then ensure the module level var is set correctly.
+# This is because `initialize_configuration` calls `get_config_data_from_env` if DB is empty.
+
+# The change in `get_config_data_from_env` to include `START_TEXT` conditionally was removed.
+# It should be: `environ.get("START_TEXT", _conditional_default_based_on_env_DISABLE_PREMIUM)`
+
+# The current global `START_TEXT` is derived from `environ.get("START_TEXT")` (initial value at top of file)
+# or (if that was None) from `CONFIG.get("START_TEXT")`.
+# This is not quite right.
+
+# Let's try again for clarity for the global `START_TEXT` variable:
+# By this point, DISABLE_PREMIUM_FOR_USERS and NON_PREMIUM_DAILY_LIMIT global vars are set from CONFIG.
+
+if DISABLE_PREMIUM_FOR_USERS:
+    _default_start_text_runtime = "Hello! Welcome to our bot. Enjoy unlimited access to all features."
+else:
+    _default_start_text_runtime = f"HELLO!! This bot offers a premium plan valid for 30 days with unlimited file retrievals. Free users can retrieve up to {NON_PREMIUM_DAILY_LIMIT} files per day. Check out /plans for more details."
+
+# Priority:
+# 1. Value from environment variable `START_TEXT` (if set by user for this run)
+# 2. Value from database `CONFIG['START_TEXT']` (if it exists from previous runs)
+# 3. Conditionally determined default `_default_start_text_runtime`
+_env_start_text_for_runtime = environ.get('START_TEXT') # This is the original env value for START_TEXT
+_db_start_text_for_runtime = CONFIG.get('START_TEXT') # This is what was loaded from DB for START_TEXT
+
+if _env_start_text_for_runtime is not None:
+    START_TEXT = _env_start_text_for_runtime
+elif _db_start_text_for_runtime is not None:
+    START_TEXT = _db_start_text_for_runtime
+else:
+    START_TEXT = _default_start_text_runtime
+
+# And ensure this resolved START_TEXT is what `CONFIG` holds if it needs to be saved.
+# This means if `START_TEXT` was resolved to `_default_start_text_runtime`,
+# `CONFIG['START_TEXT']` should be updated to this value if it wasn't already set from env/db.
+# This is handled by `save_config_to_db` which saves the entire `CONFIG` dict.
+# We need to ensure `CONFIG['START_TEXT']` is correctly populated before saving.
+
+# If CONFIG was loaded from DB, CONFIG['START_TEXT'] is already what it should be (or None).
+# If CONFIG was from `get_config_data_from_env`, then `START_TEXT` key in that dict needs to be correct.
+
+# This requires fixing `get_config_data_from_env` for `START_TEXT`
+# and then ensuring the global `START_TEXT` is correctly set *after* `CONFIG` is finalized.
+
+# The most straightforward way:
+# 1. All other config vars are loaded (including DISABLE_PREMIUM_FOR_USERS).
+# 2. Then, determine START_TEXT based on them and env/db priority.
+# 3. Update CONFIG['START_TEXT'] with this final value so it's saved correctly.
+
+# Current global vars are set. Now set START_TEXT for runtime & update CONFIG for saving.
+if DISABLE_PREMIUM_FOR_USERS:
+    final_default_start_text = "Hello! Welcome to our bot. Enjoy unlimited access to all features."
+else:
+    final_default_start_text = f"HELLO!! This bot offers a premium plan valid for 30 days with unlimited file retrievals. Free users can retrieve up to {NON_PREMIUM_DAILY_LIMIT} files per day. Check out /plans for more details."
+
+# Determine runtime START_TEXT
+runtime_start_text = environ.get('START_TEXT') # Env var for START_TEXT specifically
+if runtime_start_text is None:
+    runtime_start_text = CONFIG.get('START_TEXT') # DB value for START_TEXT
+    if runtime_start_text is None:
+        runtime_start_text = final_default_start_text # Fallback to conditional
+
+START_TEXT = runtime_start_text
+CONFIG['START_TEXT'] = runtime_start_text # Ensure CONFIG has the final version to be saved
+
+# Define the global START_TEXT variable based on priority:
+# 1. Environment variable `START_TEXT` (user-defined override)
+# 2. Value from `CONFIG['START_TEXT']` (database persisted value)
+# 3. Conditional default based on `DISABLE_PREMIUM_FOR_USERS`
+
+# First, determine the conditional default:
+if DISABLE_PREMIUM_FOR_USERS: # This global var is already set from CONFIG
+    # Takes two arguments, but the second one (daily limit) is ignored in the text.
+    _conditional_default_start_text = "Hello {0}! Welcome to our bot. All features are fully available to you."
+else:
+    # Takes two arguments: {0} for user mention, {1} for the daily limit.
+    _conditional_default_start_text = f"HELLO {{0}}!! This bot offers a premium plan valid for 30 days with unlimited file retrievals. Free users can retrieve up to {{1}} files per day. Check out /plans for more details."
+
+# Now, apply priority:
+_env_value = environ.get('START_TEXT') # Raw value from .env for START_TEXT
+_db_value = CONFIG.get('START_TEXT')   # Value from DB for START_TEXT
+
+if _env_value is not None:
+    START_TEXT = _env_value
+elif _db_value is not None:
+    START_TEXT = _db_value
+else:
+    START_TEXT = _conditional_default_start_text
+
+# Ensure that the CONFIG dictionary (which might be saved to DB)
+# reflects the final START_TEXT value that was determined.
+CONFIG['START_TEXT'] = START_TEXT
