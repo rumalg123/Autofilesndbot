@@ -130,10 +130,10 @@ async def answer(bot, query):
         
         # Check if this non-premium user has reached their daily view limit for inline queries.
         # Note: This count is for *viewing* results. Actual file retrieval count is handled in commands.py.
-        if effective_count_for_today >= info.NON_PREMIUM_DAILY_LIMIT:
-            await query.answer(results=[], 
-                               cache_time=0, 
-                               switch_pm_text=f"Daily file view limit ({info.NON_PREMIUM_DAILY_LIMIT}) reached. Upgrade for more.\nUse /plans command to view premium plans for unlimited access.", 
+        if not info.DISABLE_PREMIUM and effective_count_for_today >= info.NON_PREMIUM_DAILY_LIMIT:
+            await query.answer(results=[],
+                               cache_time=0,
+                               switch_pm_text=f"Daily file view limit ({info.NON_PREMIUM_DAILY_LIMIT}) reached. Upgrade for more.\nUse /plans command to view premium plans for unlimited access.",
                                switch_pm_parameter="premium_limit_inline")
             return # User cannot proceed with this query
         

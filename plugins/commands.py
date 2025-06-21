@@ -36,6 +36,8 @@ OWNER_ID = info.ADMINS[0] if info.ADMINS else None
 
 async def check_user_access(client, message, user_id, *, increment: bool = False):
     """Checks user access, handles premium status, and daily limits."""
+    if info.DISABLE_PREMIUM:
+        return True, "Premium disabled"
     if OWNER_ID and user_id == OWNER_ID:
         return True, "Owner access: Unlimited"
 
@@ -200,6 +202,9 @@ async def remove_premium_command(client, message):
 
 @Client.on_message(filters.command("plans") & filters.private)
 async def plans_command(client: Client, message: Message):
+    if info.DISABLE_PREMIUM:
+        await message.reply_text("Premium features are currently disabled.")
+        return
     user_id = message.from_user.id
     user_data = await db.get_user_data(user_id)  # Returns None if user not found
 
