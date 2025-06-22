@@ -1482,7 +1482,7 @@ async def handle_request(client, message):
     if total:
         # Found at least one match → notify and stop
         return await message.reply_text(
-            "<b>Results are available. Please send the same message withput request part to get files.</b>"
+            "<b>Results are available. Please send the same message without request part to get files.</b>"
         )
 
     # ——— 3. Build the “view request” button ———
