@@ -11,7 +11,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram.errors.exceptions.bad_request_400 import ChannelInvalid, UsernameInvalid, UsernameNotModified
 from pyrogram.types import Message  # Added Message
 from pyrogram.enums import ParseMode
-from database.ia_filterdb import Media, get_file_details, unpack_new_file_id, get_bad_files
+from database.ia_filterdb import Media, get_file_details, unpack_new_file_id, get_bad_files,get_search_results
 from database.users_chats_db import db
 #from info import CHANNELS, ADMINS, AUTH_CHANNEL, LOG_CHANNEL, PICS, BATCH_FILE_CAPTION, CUSTOM_FILE_CAPTION, SUPPORT_CHAT, PROTECT_CONTENT, REQST_CHANNEL, SUPPORT_CHAT_ID, MAX_B_TN, FILE_STORE_CHANNEL, PUBLIC_FILE_STORE, KEEP_ORIGINAL_CAPTION, initialize_configuration
 import info
@@ -1331,106 +1331,106 @@ async def save_template(client, message):
 #               ]]
 #         await message.reply_text("<b>Your request has been added! Please wait for some time.</b>", reply_markup=InlineKeyboardMarkup(btn))
 
-@Client.on_message(
-    (filters.command(["request", "Request"]) | filters.regex("#request") | filters.regex("#Request"))
-    & filters.group
-)
-async def requests(bot, message):
-    # Preliminary check: Ensure that SUPPORT_CHAT_ID and REQST_CHANNEL are defined when required.
-    if info.REQST_CHANNEL is None or info.SUPPORT_CHAT_ID is None:
-        return
-
-    reported_post = None
-
-    # Safely retrieve the reporter and mention
-    if message.from_user:
-        reporter = str(message.from_user.id)
-        mention = message.from_user.mention
-    elif message.sender_chat:
-        await message.reply_text("<b>Anonymous users or channels cannot request. Please use original user profile</b>")
-        return
-        # Fallback for channel posts or anonymous messages
-        #reporter = str(message.sender_chat.id)
-        #mention = message.sender_chat.title
-    else:
-        await message.reply_text("<b>Unable to process the request: Missing user or channel information.</b>")
-        return
-
-    success = True
-    # Depending on the context of the message, determine the content and handle accordingly:
-    if message.reply_to_message and info.SUPPORT_CHAT_ID == message.chat.id:
-        chat_id = message.chat.id
-        content = message.reply_to_message.text
-        try:
-            if len(content) < 3:
-                await message.reply_text(
-                    "<b>You must type about your request [Minimum 3 Characters]. Requests can't be empty.</b>")
-                success = False
-            elif info.REQST_CHANNEL is not None:
-                btn = [[
-                    InlineKeyboardButton('📥 𝖵𝗂𝖾𝗐 𝖱𝖾𝗊𝗎𝖾𝗌𝗍 📥', url=f"{message.reply_to_message.link}"),
-                    InlineKeyboardButton('📝 𝖲𝗁𝗈𝗐 𝖮𝗉𝗍𝗂𝗈𝗇𝗌 📝', callback_data=f'show_option#{reporter}')
-                ]]
-                reported_post = await bot.send_message(
-                    chat_id=info.REQST_CHANNEL,
-                    text=f"<b>𝖱𝖾𝗉𝗈𝗋𝗍𝖾𝗋 : {mention} ({reporter})\n\n𝖬𝖾𝗌𝗌𝖺𝗀𝖾 : {content}</b>",
-                    reply_markup=InlineKeyboardMarkup(btn)
-                )
-            else:
-                # Optionally send to ADMINS if REQST_CHANNEL is not defined
-                for admin in info.ADMINS:
-                    btn = [[
-                        InlineKeyboardButton('📥 𝖵𝗂𝖾𝗐 𝖱𝖾𝗊𝗎𝖾𝗌𝗍 📥', url=f"{message.reply_to_message.link}"),
-                        InlineKeyboardButton('📝 𝖲𝗁𝗈𝗐 𝖮𝗉𝗍𝗂𝗈𝗇𝗌 📝', callback_data=f'show_option#{reporter}')
-                    ]]
-                    reported_post = await bot.send_message(
-                        chat_id=admin,
-                        text=f"<b>𝖱𝖾𝗉𝗈𝗋𝗍𝖾𝗋 : {mention} ({reporter})\n\n𝖬𝖾𝗌𝗌𝖺𝗀𝖾 : {content}</b>",
-                        reply_markup=InlineKeyboardMarkup(btn)
-                    )
-        except Exception as e:
-            await message.reply_text(f"Error: {e}")
-            return
-
-    elif info.SUPPORT_CHAT_ID == message.chat.id:
-        chat_id = message.chat.id
-        content = message.text
-        # Remove keywords before processing
-        for keyword in ["#request", "/request", "#Request", "/Request"]:
-            content = content.replace(keyword, "")
-        try:
-            if len(content) < 3:
-                await message.reply_text(
-                    "<b>You must type about your request [Minimum 3 Characters]. Requests can't be empty.</b>")
-                return
-            if info.REQST_CHANNEL is not None:
-                btn = [[
-                    InlineKeyboardButton('📥 𝖵𝗂𝖾𝗐 𝖱𝖾𝗊𝗎𝖾𝗌𝗍 📥', url=f"{message.link}"),
-                    InlineKeyboardButton('📝 𝖲𝗁𝗈𝗐 𝖮𝗉𝗍𝗂𝗈𝗇𝗌 📝', callback_data=f'show_option#{reporter}')
-                ]]
-                reported_post = await bot.send_message(
-                    chat_id=info.REQST_CHANNEL,
-                    text=f"<b>𝖱𝖾𝗉𝗈𝗋𝗍𝖾𝗋 : {mention} ({reporter})\n\n𝖬𝖾𝗌𝗌𝖺𝗀𝖾 : {content}</b>",
-                    reply_markup=InlineKeyboardMarkup(btn)
-                )
-            else:
-                for admin in info.ADMINS:
-                    btn = [[
-                        InlineKeyboardButton('📥 𝖵𝗂𝖾𝗐 𝖱𝖾𝗊𝗎𝖾𝗌𝗍 📥', url=f"{message.link}"),
-                        InlineKeyboardButton('📝 𝖲𝗁𝗈𝗐 𝖮𝗉𝗍𝗂𝗈𝗇𝗌 📝', callback_data=f'show_option#{reporter}')
-                    ]]
-                    reported_post = await bot.send_message(
-                        chat_id=admin,
-                        text=f"<b>𝖱𝖾𝗉𝗈𝗋𝗍𝖾𝗋 : {mention} ({reporter})\n\n𝖬𝖾𝗌𝗌𝖺𝗀𝖾 : {content}</b>",
-                        reply_markup=InlineKeyboardMarkup(btn)
-                    )
-        except Exception as e:
-            await message.reply_text(f"Error: {e}")
-            return
-
-    else:
-        # If message context doesn't match expected sources, simply exit
-        return
+# @Client.on_message(
+#     (filters.command(["request", "Request"]) | filters.regex("#request") | filters.regex("#Request"))
+#     & filters.group
+# )
+# async def requests(bot, message):
+#     # Preliminary check: Ensure that SUPPORT_CHAT_ID and REQST_CHANNEL are defined when required.
+#     if info.REQST_CHANNEL is None or info.SUPPORT_CHAT_ID is None:
+#         return
+#
+#     reported_post = None
+#
+#     # Safely retrieve the reporter and mention
+#     if message.from_user:
+#         reporter = str(message.from_user.id)
+#         mention = message.from_user.mention
+#     elif message.sender_chat:
+#         await message.reply_text("<b>Anonymous users or channels cannot request. Please use original user profile</b>")
+#         return
+#         # Fallback for channel posts or anonymous messages
+#         #reporter = str(message.sender_chat.id)
+#         #mention = message.sender_chat.title
+#     else:
+#         await message.reply_text("<b>Unable to process the request: Missing user or channel information.</b>")
+#         return
+#
+#     success = True
+#     # Depending on the context of the message, determine the content and handle accordingly:
+#     if message.reply_to_message and info.SUPPORT_CHAT_ID == message.chat.id:
+#         chat_id = message.chat.id
+#         content = message.reply_to_message.text
+#         try:
+#             if len(content) < 3:
+#                 await message.reply_text(
+#                     "<b>You must type about your request [Minimum 3 Characters]. Requests can't be empty.</b>")
+#                 success = False
+#             elif info.REQST_CHANNEL is not None:
+#                 btn = [[
+#                     InlineKeyboardButton('📥 𝖵𝗂𝖾𝗐 𝖱𝖾𝗊𝗎𝖾𝗌𝗍 📥', url=f"{message.reply_to_message.link}"),
+#                     InlineKeyboardButton('📝 𝖲𝗁𝗈𝗐 𝖮𝗉𝗍𝗂𝗈𝗇𝗌 📝', callback_data=f'show_option#{reporter}')
+#                 ]]
+#                 reported_post = await bot.send_message(
+#                     chat_id=info.REQST_CHANNEL,
+#                     text=f"<b>𝖱𝖾𝗉𝗈𝗋𝗍𝖾𝗋 : {mention} ({reporter})\n\n𝖬𝖾𝗌𝗌𝖺𝗀𝖾 : {content}</b>",
+#                     reply_markup=InlineKeyboardMarkup(btn)
+#                 )
+#             else:
+#                 # Optionally send to ADMINS if REQST_CHANNEL is not defined
+#                 for admin in info.ADMINS:
+#                     btn = [[
+#                         InlineKeyboardButton('📥 𝖵𝗂𝖾𝗐 𝖱𝖾𝗊𝗎𝖾𝗌𝗍 📥', url=f"{message.reply_to_message.link}"),
+#                         InlineKeyboardButton('📝 𝖲𝗁𝗈𝗐 𝖮𝗉𝗍𝗂𝗈𝗇𝗌 📝', callback_data=f'show_option#{reporter}')
+#                     ]]
+#                     reported_post = await bot.send_message(
+#                         chat_id=admin,
+#                         text=f"<b>𝖱𝖾𝗉𝗈𝗋𝗍𝖾𝗋 : {mention} ({reporter})\n\n𝖬𝖾𝗌𝗌𝖺𝗀𝖾 : {content}</b>",
+#                         reply_markup=InlineKeyboardMarkup(btn)
+#                     )
+#         except Exception as e:
+#             await message.reply_text(f"Error: {e}")
+#             return
+#
+#     elif info.SUPPORT_CHAT_ID == message.chat.id:
+#         chat_id = message.chat.id
+#         content = message.text
+#         # Remove keywords before processing
+#         for keyword in ["#request", "/request", "#Request", "/Request"]:
+#             content = content.replace(keyword, "")
+#         try:
+#             if len(content) < 3:
+#                 await message.reply_text(
+#                     "<b>You must type about your request [Minimum 3 Characters]. Requests can't be empty.</b>")
+#                 return
+#             if info.REQST_CHANNEL is not None:
+#                 btn = [[
+#                     InlineKeyboardButton('📥 𝖵𝗂𝖾𝗐 𝖱𝖾𝗊𝗎𝖾𝗌𝗍 📥', url=f"{message.link}"),
+#                     InlineKeyboardButton('📝 𝖲𝗁𝗈𝗐 𝖮𝗉𝗍𝗂𝗈𝗇𝗌 📝', callback_data=f'show_option#{reporter}')
+#                 ]]
+#                 reported_post = await bot.send_message(
+#                     chat_id=info.REQST_CHANNEL,
+#                     text=f"<b>𝖱𝖾𝗉𝗈𝗋𝗍𝖾𝗋 : {mention} ({reporter})\n\n𝖬𝖾𝗌𝗌𝖺𝗀𝖾 : {content}</b>",
+#                     reply_markup=InlineKeyboardMarkup(btn)
+#                 )
+#             else:
+#                 for admin in info.ADMINS:
+#                     btn = [[
+#                         InlineKeyboardButton('📥 𝖵𝗂𝖾𝗐 𝖱𝖾𝗊𝗎𝖾𝗌𝗍 📥', url=f"{message.link}"),
+#                         InlineKeyboardButton('📝 𝖲𝗁𝗈𝗐 𝖮𝗉𝗍𝗂𝗈𝗇𝗌 📝', callback_data=f'show_option#{reporter}')
+#                     ]]
+#                     reported_post = await bot.send_message(
+#                         chat_id=admin,
+#                         text=f"<b>𝖱𝖾𝗉𝗈𝗋𝗍𝖾𝗋 : {mention} ({reporter})\n\n𝖬𝖾𝗌𝗌𝖺𝗀𝖾 : {content}</b>",
+#                         reply_markup=InlineKeyboardMarkup(btn)
+#                     )
+#         except Exception as e:
+#             await message.reply_text(f"Error: {e}")
+#             return
+#
+#     else:
+#         # If message context doesn't match expected sources, simply exit
+#         return
 
     # Acknowledge successful request submission
     # if success:
@@ -1442,6 +1442,84 @@ async def requests(bot, message):
     #         InlineKeyboardButton('📥 𝖵𝗂𝖾𝗐 𝖱𝖾𝗊𝗎𝖾𝗌𝗍 📥', url=f"{reported_post.link}")
     #     ]]
     #     await message.reply_text("<b>Your request has been added! Please wait for some time.</b>", reply_markup=InlineKeyboardMarkup(btn))
+
+
+@Client.on_message(
+    filters.group
+    & (filters.command(["request", "Request"]) | filters.regex(r"#?[Rr]equest"))
+)
+async def handle_request(client, message):
+    # ——— 1. Quick sanity checks ———
+    if not info.REQST_CHANNEL or not info.SUPPORT_CHAT_ID:
+        return  # configuration missing
+
+    if message.sender_chat:
+        return await message.reply_text(
+            "<b>Anonymous users or channels cannot request. Please use your personal profile.</b>"
+        )
+
+    user = message.from_user
+    if not user:
+        return await message.reply_text(
+            "<b>Unable to process the request: Missing user information.</b>"
+        )
+
+    # ——— 2. Extract content ———
+    if message.reply_to_message and message.chat.id == info.SUPPORT_CHAT_ID:
+        raw = message.reply_to_message.text or ""
+        link = message.reply_to_message.link
+    else:
+        # strip any form of the “request” keyword from the start
+        raw = re.sub(r"(?i)#?/?request", "", message.text)
+        link = message.link
+
+    content = raw.strip()
+    if len(content) < 3:
+        return await message.reply_text(
+            "<b>You must type about your request [Minimum 3 Characters]. Requests can't be empty.</b>"
+        )
+    files, next_offset, total = await get_search_results(message.chat.id, content)
+    if total:
+        # Found at least one match → notify and stop
+        return await message.reply_text(
+            "<b>Results are available. Please send the same message withput request part to get files.</b>"
+        )
+
+    # ——— 3. Build the “view request” button ———
+    btn = InlineKeyboardMarkup(
+        [[
+            InlineKeyboardButton("📥 View Request", url=link),
+            InlineKeyboardButton("📝 Show Options", callback_data=f"show_option#{user.id}")
+        ]]
+    )
+
+    report_text = (
+        f"<b>Reporter:</b> {user.mention} ({user.id})\n\n"
+        f"<b>Message:</b> {content}"
+    )
+
+    # ——— 4. Send it off ———
+    if info.REQST_CHANNEL:
+        await client.send_message(
+            chat_id=info.REQST_CHANNEL,
+            text=report_text,
+            reply_markup=btn
+        )
+    else:
+        # fallback to individual admins
+        for admin_id in info.ADMINS:
+            await client.send_message(
+                chat_id=admin_id,
+                text=report_text,
+                reply_markup=btn
+            )
+
+    # ——— 5. Acknowledge back to the user ———
+    return await message.reply_text(
+        "<b>Your request has been added to the request log. "
+        "An admin will notify you on an update as soon as possible.</b>"
+    )
+
 
 
 @Client.on_message(filters.command("usend") & filters.user(info.ADMINS))
