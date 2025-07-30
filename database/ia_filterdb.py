@@ -6,7 +6,7 @@ import base64
 from pyrogram.file_id import FileId
 from pymongo.errors import DuplicateKeyError
 from umongo import Instance, Document, fields
-from motor.motor_asyncio import AsyncIOMotorClient
+from .db_client import db, mongo_sem
 from marshmallow.exceptions import ValidationError
 import info
 from utils import get_settings, save_group_settings
@@ -14,9 +14,7 @@ from utils import get_settings, save_group_settings
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Initialize asynchronous client, database and uMongo instance.
-client = AsyncIOMotorClient(info.DATABASE_URI)
-db = client[info.DATABASE_NAME]
+# Initialize uMongo instance using the shared client
 instance = Instance.from_db(db)
 
 @instance.register
@@ -63,7 +61,8 @@ async def save_file(media):
         return False, 2
     else:
         try:
-            await file.commit() # type: ignore
+            async with mongo_sem:
+                await file.commit()  # type: ignore
         except DuplicateKeyError:
             logger.warning(
                 f'{getattr(media, "file_name", "NO_FILE")} is already saved in the database.'
@@ -110,14 +109,16 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
         mongo_filter['file_type'] = file_type
 
     # Get the total number of matching documents
-    total_results = await Media.count_documents(mongo_filter)
+    async with mongo_sem:
+        total_results = await Media.count_documents(mongo_filter)
     next_offset = offset + max_results
     if next_offset > total_results:
         next_offset = ''
 
     # Build a cursor with sorting, skipping, and limiting results
     cursor = Media.find(mongo_filter).sort('$natural', -1).skip(offset).limit(max_results)
-    files = await cursor.to_list(length=max_results)
+    async with mongo_sem:
+        files = await cursor.to_list(length=max_results)
 
     return files, next_offset, total_results
 
@@ -145,9 +146,11 @@ async def get_bad_files(query, file_type=None, filter=False):
     if file_type:
         mongo_filter['file_type'] = file_type
 
-    total_results = await Media.count_documents(mongo_filter)
+    async with mongo_sem:
+        total_results = await Media.count_documents(mongo_filter)
     cursor = Media.find(mongo_filter).sort('$natural', -1)
-    files = await cursor.to_list(length=total_results)
+    async with mongo_sem:
+        files = await cursor.to_list(length=total_results)
 
     return files, total_results
 
@@ -156,7 +159,8 @@ async def get_file_details(query):
     """Return details for a file with the given file_id."""
     mongo_filter = {'file_id': query}
     cursor = Media.find(mongo_filter)
-    filedetails = await cursor.to_list(length=1)
+    async with mongo_sem:
+        filedetails = await cursor.to_list(length=1)
     return filedetails
 
 
