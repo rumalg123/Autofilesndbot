@@ -1,19 +1,17 @@
-import motor.motor_asyncio
 import info
 from pyrogram import enums
 import logging
+from .db_client import db, mongo_sem
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
 
-client = motor.motor_asyncio.AsyncIOMotorClient(info.DATABASE_URI)
-db = client[info.DATABASE_NAME]
 
 
 async def add_filter(grp_id, text, reply_text, btn, file, alert):
     collection = db[str(grp_id)]
-    # If needed, you can uncomment and await the index creation:
-    # await collection.create_index([('text', 'text')])
+    async with mongo_sem:
+        await collection.create_index('text')
     
     data = {
         'text': str(text),
@@ -24,7 +22,8 @@ async def add_filter(grp_id, text, reply_text, btn, file, alert):
     }
     
     try:
-        await collection.update_one({'text': str(text)}, {"$set": data}, upsert=True)
+        async with mongo_sem:
+            await collection.update_one({'text': str(text)}, {"$set": data}, upsert=True)
     except Exception:
         logger.exception('Some error occurred while updating the filter!', exc_info=True)
              
@@ -33,7 +32,8 @@ async def find_filter(group_id, name):
     collection = db[str(group_id)]
     try:
         # Using find_one to retrieve a single matching filter
-        doc = await collection.find_one({"text": name})
+        async with mongo_sem:
+            doc = await collection.find_one({"text": name})
         if doc is None:
             return None, None, None, None
         
@@ -65,9 +65,11 @@ async def delete_filter(message, text, group_id):
     collection = db[str(group_id)]
     myquery = {'text': text}
     try:
-        count = await collection.count_documents(myquery)
+        async with mongo_sem:
+            count = await collection.count_documents(myquery)
         if count == 1:
-            await collection.delete_one(myquery)
+            async with mongo_sem:
+                await collection.delete_one(myquery)
             await message.reply_text(
                 f"'`{text}`'  deleted. I'll not respond to that filter anymore.",
                 quote=True,
@@ -81,13 +83,15 @@ async def delete_filter(message, text, group_id):
 
 async def del_all(message, group_id, title):
     try:
-        collection_names = await db.list_collection_names()
+        async with mongo_sem:
+            collection_names = await db.list_collection_names()
         if str(group_id) not in collection_names:
             await message.edit_text(f"Nothing to remove in {title}!")
             return
 
         collection = db[str(group_id)]
-        await collection.drop()
+        async with mongo_sem:
+            await collection.drop()
         await message.edit_text(f"All filters from {title} have been removed")
     except Exception:
         logger.exception("Error occurred during del_all", exc_info=True)
@@ -97,7 +101,8 @@ async def del_all(message, group_id, title):
 async def count_filters(group_id):
     collection = db[str(group_id)]
     try:
-        count = await collection.count_documents({})
+        async with mongo_sem:
+            count = await collection.count_documents({})
         return False if count == 0 else count
     except Exception:
         logger.exception("Error occurred during count_filters", exc_info=True)
@@ -106,14 +111,16 @@ async def count_filters(group_id):
 
 async def filter_stats():
     try:
-        collection_names = await db.list_collection_names()
+        async with mongo_sem:
+            collection_names = await db.list_collection_names()
         if "CONNECTION" in collection_names:
             collection_names.remove("CONNECTION")
 
         total_count = 0
         for coll_name in collection_names:
             collection = db[coll_name]
-            cnt = await collection.count_documents({})
+            async with mongo_sem:
+                cnt = await collection.count_documents({})
             total_count += cnt
 
         total_collections = len(collection_names)

@@ -1,17 +1,17 @@
-import motor.motor_asyncio
 import info
+from .db_client import db, mongo_sem
 from pyrogram import enums
 import logging
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
 
-client = motor.motor_asyncio.AsyncIOMotorClient(info.DATABASE_URI)
-db = client[info.DATABASE_NAME]
 
 
 async def add_gfilter(gfilters, text, reply_text, btn, file, alert):
     collection = db[str(gfilters)]
+    async with mongo_sem:
+        await collection.create_index('text')
     data = {
         'text': str(text),
         'reply': str(reply_text),
@@ -20,7 +20,8 @@ async def add_gfilter(gfilters, text, reply_text, btn, file, alert):
         'alert': str(alert)
     }
     try:
-        await collection.update_one({'text': str(text)}, {"$set": data}, upsert=True)
+        async with mongo_sem:
+            await collection.update_one({'text': str(text)}, {"$set": data}, upsert=True)
     except Exception:
         logger.exception('Some error occurred during add_gfilter!', exc_info=True)
 
@@ -29,7 +30,8 @@ async def find_gfilter(gfilters, name):
     collection = db[str(gfilters)]
     try:
         # Fetch one matching document using find_one which is more efficient
-        doc = await collection.find_one({"text": name})
+        async with mongo_sem:
+            doc = await collection.find_one({"text": name})
         if doc is None:
             return None, None, None, None
 
@@ -60,9 +62,11 @@ async def get_gfilters(gfilters):
 async def delete_gfilter(message, text, gfilters):
     collection = db[str(gfilters)]
     query = {'text': text}
-    count = await collection.count_documents(query)
+    async with mongo_sem:
+        count = await collection.count_documents(query)
     if count == 1:
-        await collection.delete_one(query)
+        async with mongo_sem:
+            await collection.delete_one(query)
         await message.reply_text(
             f"'`{text}`'  deleted. I'll not respond to that gfilter anymore.",
             quote=True,
@@ -74,13 +78,15 @@ async def delete_gfilter(message, text, gfilters):
 
 async def del_allg(message, gfilters):
     try:
-        collection_names = await db.list_collection_names()
+        async with mongo_sem:
+            collection_names = await db.list_collection_names()
         if str(gfilters) not in collection_names:
             await message.edit_text("Nothing to Remove !")
             return
 
         collection = db[str(gfilters)]
-        await collection.drop()
+        async with mongo_sem:
+            await collection.drop()
         await message.edit_text("All gfilters have been removed!")
     except Exception:
         logger.exception('Some error occurred during del_allg!', exc_info=True)
@@ -90,7 +96,8 @@ async def del_allg(message, gfilters):
 async def count_gfilters(gfilters):
     collection = db[str(gfilters)]
     try:
-        count = await collection.count_documents({})
+        async with mongo_sem:
+            count = await collection.count_documents({})
         return False if count == 0 else count
     except Exception:
         logger.exception('Some error occurred during count_gfilters!', exc_info=True)
@@ -99,14 +106,16 @@ async def count_gfilters(gfilters):
 
 async def gfilter_stats():
     try:
-        collection_names = await db.list_collection_names()
+        async with mongo_sem:
+            collection_names = await db.list_collection_names()
         if "CONNECTION" in collection_names:
             collection_names.remove("CONNECTION")
 
         total_count = 0
         for coll_name in collection_names:
             collection = db[coll_name]
-            count = await collection.count_documents({})
+            async with mongo_sem:
+                count = await collection.count_documents({})
             total_count += count
 
         total_collections = len(collection_names)
